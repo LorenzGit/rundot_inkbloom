@@ -61,12 +61,12 @@ documented at their call sites:
 
 ## Art direction
 
-A warm sheet of paper inside a modern game: real fibre and pigment on the page,
-a deep indigo shell with rounded, top-lit surfaces around it, and one saturated
-gold accent for progress and reward. Everything is procedural — the paper's
-fibre and foxing, the ink's granulation and wet edge, the bottles, the audio,
-and `public/thumbnail.jpg`, which is rendered by the simulation itself and also
-serves as the title screen's hero art.
+A bright craft table: a saturated teal ground, a warm wooden shelf of ink
+bottles, cream cards with chunky bevelled edges, and one amber accent for
+progress and reward. The page is a real sheet of rag paper and is the only quiet
+thing on screen. Everything is procedural — the paper's fibre and foxing, the
+ink's granulation and wet edge, the bottles, the title hero, the audio, and
+`public/thumbnail.jpg`, which is rendered by the simulation itself.
 
 Full notes: [`docs/art-direction.md`](docs/art-direction.md).
 

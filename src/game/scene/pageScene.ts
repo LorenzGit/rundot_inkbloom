@@ -22,7 +22,22 @@ import { ERASER_INDEX, INKS } from "../sim/elements.ts";
 import { createSimTexture, type SimTexture } from "./simTexture.ts";
 import { createPaperTexture, ruledBorderPath } from "./paperTexture.ts";
 import { paperStyle } from "./papers.ts";
-import { CREAM, GOLD, GOLD_GLOW, HAND, MOTION, MUTED, RIM, SERIF, SHELL_DEEP, SURFACE_HIGH, UI } from "./palette.ts";
+import {
+    CARD,
+    CARD_INK,
+    CARD_MUTED,
+    CREAM,
+    GOLD,
+    GOLD_DEEP,
+    GOLD_GLOW,
+    HAND,
+    MOTION,
+    RIM,
+    SERIF,
+    UI,
+    WOOD,
+    WOOD_DARK,
+} from "./palette.ts";
 import {
     drawBottle,
     drawBrushIcon,
@@ -129,7 +144,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const shelfGraphics = new Graphics();
     const shelfLabel = new Text({
         text: "",
-        style: new TextStyle({ fontFamily: UI, fontSize: 20, fontWeight: "800", fill: CREAM, letterSpacing: 2 }),
+        style: new TextStyle({ fontFamily: UI, fontSize: 20, fontWeight: "900", fill: 0x4a2c0c, letterSpacing: 2 }),
     });
     const flashGraphics = new Graphics();
     const particleGraphics = new Graphics();
@@ -137,9 +152,12 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const toastCard = new Graphics();
     const toastTitle = new Text({
         text: "",
-        style: new TextStyle({ fontFamily: UI, fontSize: 26, fontWeight: "800", fill: 0xffffff }),
+        style: new TextStyle({ fontFamily: UI, fontSize: 26, fontWeight: "900", fill: CARD_INK }),
     });
-    const toastNote = new Text({ text: "", style: new TextStyle({ fontFamily: HAND, fontSize: 15, fill: MUTED }) });
+    const toastNote = new Text({
+        text: "",
+        style: new TextStyle({ fontFamily: HAND, fontSize: 15, fill: CARD_MUTED }),
+    });
     const hintLine = new Text({ text: t("HintFirstTouch"), style: labelStyle(17, 0x2a2622, HAND) });
     const cursor = new Container();
     const cursorNib = new Graphics();
@@ -380,10 +398,12 @@ export function createPageScene(app: Application, stage: Stage): Scene {
      */
     function drawPageShadow(): void {
         pageShadow.clear();
+        // Lighter than they were: on a bright teal ground a heavy black shadow
+        // reads as a dirty band rather than as depth.
         for (const [spread, drop, alpha] of [
-            [26, 22, 0.16],
-            [13, 11, 0.22],
-            [4, 3, 0.3],
+            [24, 20, 0.09],
+            [12, 10, 0.13],
+            [4, 3, 0.2],
         ] as const) {
             pageShadow.roundRect(
                 page.x - spread,
@@ -448,22 +468,23 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const width = stage.designWidth();
         shelfGraphics.clear();
 
-        // The tray follows the same recipe as every DOM surface in the game:
-        // a top-lit gradient, a one-pixel light rim along its top edge, and a
-        // shadow cast onto it from the sheet above. Layered fills stand in for
-        // a gradient, which Pixi Graphics has no primitive for.
+        // The tray is a wooden plank: the one heavy, warm object on screen,
+        // and the thing that makes the row read as a shelf of real bottles
+        // rather than a toolbar. Layered fills stand in for a gradient, which
+        // Pixi Graphics has no primitive for.
         const top = shelf.top;
         const bottom = stage.designHeight();
         const height = bottom - top;
-        shelfGraphics.roundRect(-20, top, width + 40, height + 30, 26).fill({ color: SURFACE_HIGH });
-        const bands = 8;
+        shelfGraphics.roundRect(-24, top, width + 48, height + 40, 30).fill({ color: WOOD });
+        const bands = 9;
         for (let band = 1; band < bands; band++) {
             const t = band / bands;
             shelfGraphics.rect(0, top + height * t, width, height / bands + 1);
-            shelfGraphics.fill({ color: SHELL_DEEP, alpha: t * 0.4 });
+            shelfGraphics.fill({ color: WOOD_DARK, alpha: t * 0.42 });
         }
-        shelfGraphics.roundRect(-20, top, width + 40, 3, 2).fill({ color: RIM, alpha: 0.16 });
-        shelfGraphics.rect(0, top + 3, width, 16).fill({ color: 0x000000, alpha: 0.24 });
+        // Front lip: a bright edge and the shadow the sheet casts onto it.
+        shelfGraphics.roundRect(-24, top, width + 48, 5, 3).fill({ color: 0xffd7a3, alpha: 0.6 });
+        shelfGraphics.rect(0, top + 5, width, 18).fill({ color: WOOD_DARK, alpha: 0.3 });
 
         const discoveries = store.get().discoveryCount;
         for (const item of shelfItems) {
@@ -479,46 +500,44 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             const slotH = item.size * (item.kind === "ink" ? 1.62 : 1.34);
             const slotX = item.x - slotW / 2;
             const slotY = item.y - slotH * (item.kind === "ink" ? 0.62 : 0.5);
-            shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 14);
-            shelfGraphics.fill({
-                color: isSelected ? (ink?.colour ?? GOLD) : 0x000000,
-                alpha: isSelected ? 0.28 : 0.22,
-            });
+            // Slots are cut *into* the plank, so an unselected bottle sits in a
+            // recess and the selected one is lifted out of it onto a bright
+            // amber card with its own bottom edge.
+            shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 16);
+            shelfGraphics.fill({ color: WOOD_DARK, alpha: isSelected ? 0.1 : 0.34 });
             if (isSelected && !locked) {
-                shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 14);
-                shelfGraphics.stroke({ width: 2.4, color: GOLD, alpha: 0.95 });
-                // A soft bloom so the choice is unmistakable at a glance.
-                for (let ring = 3; ring >= 1; ring--) {
-                    shelfGraphics.roundRect(
-                        slotX - ring * 2,
-                        slotY - ring * 2,
-                        slotW + ring * 4,
-                        slotH + ring * 4,
-                        14 + ring * 2,
-                    );
-                    shelfGraphics.fill({ color: GOLD, alpha: 0.05 });
-                }
+                shelfGraphics.roundRect(slotX, slotY + 5, slotW, slotH, 16);
+                shelfGraphics.fill({ color: GOLD_DEEP });
+                shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 16);
+                shelfGraphics.fill({ color: GOLD });
+                shelfGraphics.roundRect(slotX + 4, slotY + 4, slotW - 8, slotH * 0.38, 12);
+                shelfGraphics.fill({ color: 0xffffff, alpha: 0.32 });
             }
 
             shelfGraphics.save();
             // A pop is an ease-out overshoot: big immediately, settling back.
-            const popScale = pop > 0 ? 1 + Math.sin(pop * Math.PI) * 0.16 : 1;
+            //
+            // Applied as a size multiplier, NOT a scale transform. Pixi composes
+            // `scaleTransform` after `translateTransform` such that the existing
+            // translation is scaled too — at a shelf y of ~1400 design units a
+            // 1.16x pop threw the bottle 200 units down the screen.
+            const popScale = pop > 0 ? 1 + Math.sin(pop * Math.PI) * 0.18 : 1;
+            const drawSize = item.size * popScale;
             shelfGraphics.translateTransform(
                 item.x + (refusal > 0 ? Math.sin(refusal * 34) * item.size * 0.13 * refusal : 0),
                 item.y + (isSelected ? -item.size * 0.1 : 0),
             );
-            if (popScale !== 1) shelfGraphics.scaleTransform(popScale, popScale);
 
             if (item.kind === "ink" && ink) {
-                if (item.index === ERASER_INDEX) drawEraser(shelfGraphics, item.size, true);
-                else drawBottle(shelfGraphics, { size: item.size, colour: ink.colour, locked, onDesk: true });
-                if (locked) drawLockDisc(shelfGraphics, item.size);
+                if (item.index === ERASER_INDEX) drawEraser(shelfGraphics, drawSize, true);
+                else drawBottle(shelfGraphics, { size: drawSize, colour: ink.colour, locked, onDesk: true });
+                if (locked) drawLockDisc(shelfGraphics, drawSize);
             } else if (item.kind === "brush") {
-                drawBrushIcon(shelfGraphics, item.size, largeBrush, INKS[selected]?.colour ?? GOLD, true);
+                drawBrushIcon(shelfGraphics, drawSize, largeBrush, INKS[selected]?.colour ?? GOLD, true);
             } else if (item.kind === "mirror") {
-                drawMirrorIcon(shelfGraphics, item.size);
+                drawMirrorIcon(shelfGraphics, drawSize);
             } else {
-                drawTornSheetIcon(shelfGraphics, item.size, true);
+                drawTornSheetIcon(shelfGraphics, drawSize, true);
             }
             shelfGraphics.restore();
         }
@@ -581,8 +600,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             style: new TextStyle({
                 fontFamily: UI,
                 fontSize: 13,
-                fontWeight: "700",
-                fill: MUTED,
+                fontWeight: "800",
+                fill: 0x5a3714,
                 align: "center",
                 letterSpacing: 0.6,
             }),
@@ -1027,11 +1046,11 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         toastCard.roundRect(-cardWidth / 2, -cardHeight / 2 + 5, cardWidth, cardHeight, 18);
         toastCard.fill({ color: 0x000000, alpha: 0.45 });
         toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 18);
-        toastCard.fill({ color: SURFACE_HIGH });
-        toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, 3, 2);
-        toastCard.fill({ color: RIM, alpha: 0.2 });
+        toastCard.fill({ color: CARD });
+        toastCard.roundRect(-cardWidth / 2 + 6, -cardHeight / 2 + 4, cardWidth - 12, cardHeight * 0.34, 12);
+        toastCard.fill({ color: RIM, alpha: 0.5 });
         toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 18);
-        toastCard.stroke({ width: 2, color: current.colour, alpha: 0.7 });
+        toastCard.stroke({ width: 3, color: current.colour, alpha: 0.9 });
 
         // The medal: the discovery's own colour behind a gold star.
         const iconX = -cardWidth / 2 + 26;

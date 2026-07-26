@@ -127,7 +127,16 @@ export function drawBottle(g: Graphics, style: BottleStyle): void {
     // stand in for the vertical gradient Pixi Graphics cannot express, and are
     // what stop the bottle reading as a flat sticker.
     body();
-    g.fill({ color: colour, alpha: locked ? 0.26 : 1 });
+    // A locked bottle is slate, not a faded version of its ink — on a wooden
+    // shelf a low-alpha tint just turns into more wood. It keeps a hint of its
+    // colour so the player can still see which ink is coming.
+    if (locked) {
+        g.fill({ color: 0x4c4a58 });
+        body();
+        g.fill({ color: colour, alpha: 0.28 });
+    } else {
+        g.fill({ color: colour });
+    }
     if (!locked) {
         g.roundRect(-bodyW / 2, base - bodyH * 0.55, bodyW, bodyH * 0.55, radius);
         g.fill({ color: 0x000000, alpha: 0.18 });
@@ -201,10 +210,10 @@ export function drawEraser(g: Graphics, s: number, _onDesk: boolean): void {
     g.fill({ color: 0x000000, alpha: 0.4 });
 
     g.roundRect(-w / 2, -h / 2, w, h, s * 0.1);
-    g.fill({ color: 0xdcd3f0 });
+    g.fill({ color: 0xf6ecd8 });
     // The worn, ink-stained end.
     g.roundRect(-w / 2, h * 0.06, w, h * 0.44, s * 0.1);
-    g.fill({ color: 0x8f86b8, alpha: 0.55 });
+    g.fill({ color: 0x9c8a76, alpha: 0.6 });
     // Lit top face.
     g.roundRect(-w / 2, -h / 2, w, h * 0.3, s * 0.1);
     g.fill({ color: 0xffffff, alpha: 0.5 });

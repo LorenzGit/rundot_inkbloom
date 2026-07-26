@@ -1,28 +1,42 @@
 /**
  * Art direction: **Inkbloom**.
  *
- * The page is a warm sheet of rag paper — that part is the game and never
- * changes, because the whole look depends on pigment multiplying into fibre.
- * Everything *around* it is a modern mobile-game chrome: a deep indigo shell,
- * rounded surfaces with a light rim and a real drop shadow, and one saturated
- * gold accent reserved for progress and reward.
+ * A bright, friendly craft table. A teal ground, a warm wooden shelf of ink
+ * bottles, cream cards with chunky rounded edges, and one amber accent for
+ * progress and reward. The page is a real sheet of rag paper and is the only
+ * quiet, tactile thing on screen — which is exactly why it holds the eye.
  *
  * Two rules keep it coherent:
  *   1. **On the page it is pigment.** Ink multiplies into the sheet so the
  *      paper's grain and vignette read through every mark.
- *   2. **Off the page it is UI.** Deep indigo, rounded, lit from above, with
- *      gold used only for things the player earned. The indigo is what makes
- *      the paper glow — a brown desk made it muddy.
+ *   2. **Off the page it is a toy.** Saturated ground, wooden shelf, cream
+ *      cards, thick bottom-bevelled buttons. Amber is reserved for things the
+ *      player earned.
  */
 
-/** The shell behind everything. Deep indigo, lit from the top. */
-export const SHELL = 0x141222;
-export const SHELL_DEEP = 0x0b0a13;
-export const SHELL_LIFT = 0x241f3a;
+/**
+ * The shell behind everything: a bright teal craft table.
+ *
+ * Casual mobile games are high-key and saturated. A near-black shell reads as a
+ * premium puzzle game; this reads as something you play on a bus. The teal is
+ * also the one hue none of the ten inks use, so every ink stays legible on it.
+ */
+export const SHELL = 0x148c8c;
+export const SHELL_DEEP = 0x0a5457;
+export const SHELL_LIFT = 0x2bb3ad;
 
-/** Raised surfaces: the shelf plank, cards, buttons. */
-export const SURFACE = 0x241f38;
-export const SURFACE_HIGH = 0x322b4d;
+/** The shelf: a warm wooden plank, the one heavy object on screen. */
+export const WOOD = 0xc98f55;
+export const WOOD_DEEP = 0x8a5628;
+export const WOOD_DARK = 0x5f3a1b;
+
+/** Cards and panels are cream, not dark. This is the biggest casual signal. */
+export const CARD = 0xfff8ea;
+export const CARD_SHADE = 0xf2e3c9;
+/** Type on cream. */
+export const CARD_INK = 0x3a2e24;
+export const CARD_MUTED = 0x8b7a68;
+
 /** The one-pixel light rim that sells a surface as raised. */
 export const RIM = 0xffffff;
 
@@ -33,18 +47,22 @@ export const PAPER_SHADE = 0xcbbc98;
 /** The pen. Every ruled line, label, and glyph drawn on the sheet. */
 export const INK = 0x2a2622;
 
-/** Type on the dark shell. */
-export const CREAM = 0xf4eedd;
-export const MUTED = 0x9d95c2;
+/** Type on the teal shell. */
+export const CREAM = 0xfff8ea;
+export const MUTED = 0xa8ded8;
 
-/** Gold. Progress, discoveries, unlocks — and nothing else. */
-export const GOLD = 0xf5b841;
-export const GOLD_DEEP = 0xd8862a;
-export const GOLD_GLOW = 0xffd98a;
+/** Amber. Progress, discoveries, unlocks — and nothing else. */
+export const GOLD = 0xffb92e;
+export const GOLD_DEEP = 0xdc8a11;
+export const GOLD_GLOW = 0xffd97a;
 
-/** Confirmation and a dormant, not-yet-earned state. */
-export const CONFIRMED = 0x4cc38a;
-export const DORMANT = 0x5d5680;
+/** Confirmation, and a dormant not-yet-earned state. */
+export const CONFIRMED = 0x5cc96b;
+export const DORMANT = 0x9c8a76;
+
+/** Kept for compatibility with the surface helpers. */
+export const SURFACE = WOOD_DEEP;
+export const SURFACE_HIGH = WOOD;
 
 /**
  * Type roles.

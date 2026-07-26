@@ -55,8 +55,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "multiply",
         rule: 0x2a2622,
         label: 0x2a2622,
-        desk: 0x141222,
-        deskLamp: 0x2b2447,
+        desk: 0x0e7276,
+        deskLamp: 0x2bb3ad,
         dark: false,
     },
     vellum: {
@@ -73,8 +73,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "multiply",
         rule: 0x3a3626,
         label: 0x3a3626,
-        desk: 0x16182a,
-        deskLamp: 0x2f3450,
+        desk: 0x107070,
+        deskLamp: 0x35b8a8,
         dark: false,
     },
     nocturne: {
@@ -91,8 +91,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "screen",
         rule: 0xd7ddf2,
         label: 0xe8ecfa,
-        desk: 0x0a0c1a,
-        deskLamp: 0x1f2647,
+        desk: 0x0a4f5c,
+        deskLamp: 0x1d8ea0,
         dark: true,
     },
     blueprint: {
@@ -109,8 +109,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "screen",
         rule: 0xcfe7f6,
         label: 0xe4f2fb,
-        desk: 0x08161f,
-        deskLamp: 0x14384c,
+        desk: 0x08505f,
+        deskLamp: 0x1590a6,
         dark: true,
     },
 };

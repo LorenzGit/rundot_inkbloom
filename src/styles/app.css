@@ -18,14 +18,15 @@
 --------------------------------------------------------------------------- */
 
 @theme {
-    --color-shell: #141222;
-    --color-surface: #241f38;
+    --color-shell: #148c8c;
+    --color-wood: #c98f55;
+    --color-card: #fff8ea;
     --color-paper: #fcf9f0;
-    --color-ink: #2a2622;
-    --color-cream: #f4eedd;
-    --color-muted: #9d95c2;
-    --color-gold: #f5b841;
-    --color-confirmed: #4cc38a;
+    --color-ink: #3a2e24;
+    --color-cream: #fff8ea;
+    --color-muted: #8b7a68;
+    --color-gold: #ffb92e;
+    --color-confirmed: #5cc96b;
 }
 
 :root {
@@ -38,23 +39,34 @@
     /* Short marginal notes only. */
     --font-hand: "Bradley Hand", "Chalkboard SE", "Segoe Print", "Comic Sans MS", cursive;
 
-    --shell: #141222;
-    --shell-deep: #0b0a13;
-    --surface: #241f38;
-    --surface-high: #322b4d;
-    --gold: #f5b841;
-    --gold-deep: #d8862a;
-    --gold-glow: #ffd98a;
-    --cream: #f4eedd;
-    --muted: #9d95c2;
+    --shell: #148c8c;
+    --shell-deep: #0a5457;
+    --shell-lift: #2bb3ad;
+    --wood: #c98f55;
+    --wood-deep: #8a5628;
+    --wood-dark: #5f3a1b;
+    --card: #fff8ea;
+    --card-shade: #f2e3c9;
+    --card-ink: #3a2e24;
+    --card-muted: #8b7a68;
+    --gold: #ffb92e;
+    --gold-deep: #dc8a11;
+    --gold-edge: #a4620a;
+    --gold-glow: #ffd97a;
+    --green: #5cc96b;
+    --green-deep: #34a04b;
+    --green-edge: #237035;
+    --cream: #fff8ea;
+    --muted: #a8ded8;
 
-    --radius: 18px;
-    --radius-lg: 26px;
+    /* Chunky by design. Casual games use much larger radii than product UI. */
+    --radius: 22px;
+    --radius-lg: 30px;
     --radius-pill: 999px;
 
-    --lift-1: 0 2px 0 rgba(255, 255, 255, 0.07) inset, 0 6px 14px rgba(6, 5, 12, 0.5);
-    --lift-2: 0 2px 0 rgba(255, 255, 255, 0.09) inset, 0 12px 26px rgba(6, 5, 12, 0.55);
-    --lift-3: 0 2px 0 rgba(255, 255, 255, 0.12) inset, 0 20px 44px rgba(6, 5, 12, 0.62);
+    --lift-1: 0 3px 0 rgba(0, 0, 0, 0.16), 0 6px 14px rgba(5, 40, 42, 0.3);
+    --lift-2: 0 5px 0 rgba(0, 0, 0, 0.18), 0 14px 26px rgba(5, 40, 42, 0.35);
+    --lift-3: 0 6px 0 rgba(0, 0, 0, 0.2), 0 22px 44px rgba(5, 40, 42, 0.42);
 
     --game-w: 100vw;
 
@@ -92,7 +104,7 @@ body {
     inset: 0;
     overflow: hidden;
     margin: 0;
-    background: #08070d;
+    background: #0a5457;
     font-size: 17px;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
@@ -105,9 +117,8 @@ body::before {
     z-index: 0;
     pointer-events: none;
     background:
-        radial-gradient(ellipse at 50% 0%, rgba(120, 96, 220, 0.28), transparent 62%),
-        radial-gradient(ellipse at 50% 100%, rgba(245, 184, 65, 0.1), transparent 55%),
-        linear-gradient(180deg, #171430, #0b0a13 70%);
+        radial-gradient(ellipse at 50% 0%, rgba(120, 235, 220, 0.4), transparent 60%),
+        linear-gradient(180deg, #1aa3a0, #0a5457 78%);
 }
 
 #root {
@@ -126,9 +137,9 @@ body::before {
     overflow: hidden;
     color: var(--cream);
     background:
-        radial-gradient(ellipse at 50% 8%, rgba(126, 102, 226, 0.26), transparent 58%),
-        linear-gradient(180deg, #1a1730, #0d0b16 78%);
-    box-shadow: 0 0 90px rgba(0, 0, 0, 0.8);
+        radial-gradient(ellipse at 50% 6%, rgba(140, 245, 230, 0.45), transparent 55%),
+        linear-gradient(180deg, #1cadaa, #0c6265 74%, #0a5457);
+    box-shadow: 0 0 70px rgba(0, 0, 0, 0.55);
 }
 
 button,
@@ -193,27 +204,28 @@ input:focus-visible {
     width: min(80%, 320px);
     padding: 1.05rem 1.5rem;
     border-radius: var(--radius-pill);
-    color: #2a1c05;
-    background: linear-gradient(180deg, var(--gold-glow), var(--gold) 45%, var(--gold-deep));
+    color: #103d1c;
+    background: linear-gradient(180deg, #8ee49a, var(--green) 42%, var(--green-deep));
     box-shadow:
-        0 2px 0 rgba(255, 255, 255, 0.45) inset,
-        0 6px 0 #a3611b,
-        0 14px 26px rgba(6, 5, 12, 0.55);
-    font-size: 1.14rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
+        0 3px 0 rgba(255, 255, 255, 0.55) inset,
+        0 8px 0 var(--green-edge),
+        0 16px 24px rgba(5, 40, 42, 0.4);
+    font-size: 1.2rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
     transition:
-        transform 90ms ease-out,
-        box-shadow 90ms ease-out;
+        transform 80ms ease-out,
+        box-shadow 80ms ease-out;
 }
 
 .cta:active {
-    transform: translateY(5px);
+    transform: translateY(7px);
     box-shadow:
-        0 2px 0 rgba(255, 255, 255, 0.4) inset,
-        0 1px 0 #a3611b,
-        0 6px 12px rgba(6, 5, 12, 0.5);
+        0 3px 0 rgba(255, 255, 255, 0.5) inset,
+        0 1px 0 var(--green-edge),
+        0 6px 10px rgba(5, 40, 42, 0.4);
 }
 
 /* Secondary control: a dark pill on the shell. */
@@ -224,17 +236,20 @@ input:focus-visible {
     gap: 0.45rem;
     padding: 0.7rem 1.15rem;
     border-radius: var(--radius-pill);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05));
-    box-shadow: var(--lift-1);
-    color: var(--cream);
-    font-size: 0.9rem;
-    font-weight: 700;
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.16),
+        0 8px 14px rgba(5, 40, 42, 0.28);
+    color: var(--card-ink);
+    font-size: 0.92rem;
+    font-weight: 800;
     letter-spacing: 0.03em;
-    transition: transform 110ms ease-out;
+    transition: transform 90ms ease-out;
 }
 
 .pill:active {
-    transform: scale(0.95);
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
 }
 
 .icon-button {
@@ -243,16 +258,19 @@ input:focus-visible {
     width: 2.85rem;
     height: 2.85rem;
     border-radius: var(--radius-pill);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
-    box-shadow: var(--lift-1);
-    color: var(--cream);
-    font-size: 1.15rem;
-    font-weight: 700;
-    transition: transform 110ms ease-out;
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.16),
+        0 8px 14px rgba(5, 40, 42, 0.28);
+    color: var(--card-ink);
+    font-size: 1.2rem;
+    font-weight: 900;
+    transition: transform 90ms ease-out;
 }
 
 .icon-button:active {
-    transform: scale(0.92);
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
 }
 
 /* ---------------------------------------------------------------------------
@@ -343,7 +361,7 @@ input:focus-visible {
     display: block;
     height: 100%;
     border-radius: var(--radius-pill);
-    background: linear-gradient(90deg, var(--gold-deep), var(--gold-glow));
+    background: linear-gradient(180deg, var(--gold-glow), var(--gold-deep));
     transition: width 220ms ease-out;
 }
 
@@ -353,7 +371,8 @@ input:focus-visible {
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--cream);
+    opacity: 0.85;
 }
 
 /* ---------------------------------------------------------------------------
@@ -378,15 +397,18 @@ input:focus-visible {
    that tile does not appear twice on this screen. */
 .title-hero {
     position: relative;
-    width: min(84%, 340px);
-    aspect-ratio: 16 / 9;
-    margin-bottom: 0.35rem;
-    border-radius: 22px;
-    overflow: hidden;
-    box-shadow:
-        0 2px 0 rgba(255, 255, 255, 0.25) inset,
-        0 22px 44px rgba(6, 5, 12, 0.7);
+    width: min(72%, 280px);
+    aspect-ratio: 234 / 140;
+    margin-bottom: 0.1rem;
     animation: hero-float 5s ease-in-out infinite;
+}
+
+.title-hero svg {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    filter: drop-shadow(0 10px 16px rgba(4, 40, 42, 0.45));
 }
 
 .title-hero::before {
@@ -394,15 +416,7 @@ input:focus-visible {
     position: absolute;
     inset: -22%;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(245, 184, 65, 0.3), transparent 62%);
-}
-
-.title-hero img {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: 50% 100%;
+    background: radial-gradient(circle, rgba(255, 233, 184, 0.32), transparent 62%);
 }
 
 @keyframes hero-float {
@@ -421,7 +435,9 @@ input:focus-visible {
     font-size: clamp(2.4rem, 12vw, 3.2rem);
     font-weight: 400;
     color: #fff;
-    text-shadow: 0 4px 18px rgba(126, 102, 226, 0.6);
+    text-shadow:
+        0 3px 0 rgba(6, 60, 62, 0.55),
+        0 8px 20px rgba(4, 40, 42, 0.6);
 }
 
 .title-tagline {
@@ -430,7 +446,7 @@ input:focus-visible {
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--gold);
+    color: #ffe9b8;
 }
 
 /* Progress the returning player sees first. */
@@ -442,8 +458,8 @@ input:focus-visible {
     width: min(74%, 300px);
     padding: 0.85rem 1rem;
     border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
-    box-shadow: var(--lift-1);
+    background: rgba(4, 46, 48, 0.32);
+    box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.12);
 }
 
 .title-progress-row {
@@ -454,7 +470,7 @@ input:focus-visible {
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: #bdeee7;
 }
 
 .title-progress-row strong {
@@ -466,9 +482,10 @@ input:focus-visible {
 
 .meter {
     width: 100%;
-    height: 9px;
+    height: 10px;
     border-radius: var(--radius-pill);
-    background: rgba(0, 0, 0, 0.42);
+    background: rgba(0, 0, 0, 0.16);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
     overflow: hidden;
 }
 
@@ -476,8 +493,7 @@ input:focus-visible {
     display: block;
     height: 100%;
     border-radius: var(--radius-pill);
-    background: linear-gradient(90deg, var(--gold-deep), var(--gold-glow));
-    box-shadow: 0 0 12px rgba(245, 184, 65, 0.6);
+    background: linear-gradient(180deg, var(--gold-glow), var(--gold) 50%, var(--gold-deep));
     transition: width 420ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
@@ -494,8 +510,8 @@ input:focus-visible {
     font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0.14em;
-    color: var(--muted);
-    opacity: 0.55;
+    color: var(--cream);
+    opacity: 0.5;
 }
 
 /* ---------------------------------------------------------------------------
@@ -526,10 +542,12 @@ input:focus-visible {
     align-items: center;
     gap: 0.6rem;
     min-width: 0;
-    padding: 0.5rem 0.9rem 0.5rem 0.7rem;
+    padding: 0.5rem 0.95rem 0.5rem 0.75rem;
     border-radius: var(--radius-pill);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
-    box-shadow: var(--lift-1);
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.16),
+        0 8px 14px rgba(5, 40, 42, 0.28);
     transition: transform 130ms ease-out;
 }
 
@@ -552,17 +570,17 @@ input:focus-visible {
 }
 
 .progress-chip .count {
-    font-size: 0.98rem;
-    font-weight: 800;
+    font-size: 1rem;
+    font-weight: 900;
     line-height: 1;
     font-variant-numeric: tabular-nums;
-    color: #fff;
+    color: var(--card-ink);
 }
 
 .progress-chip .count em {
     font-style: normal;
-    font-weight: 700;
-    color: var(--muted);
+    font-weight: 800;
+    color: var(--card-muted);
 }
 
 .progress-chip .meter {
@@ -578,11 +596,11 @@ input:focus-visible {
         transform: scale(1);
     }
     35% {
-        transform: scale(1.06);
+        transform: scale(1.07);
         box-shadow:
-            0 2px 0 rgba(255, 255, 255, 0.12) inset,
-            0 0 0 3px rgba(245, 184, 65, 0.55),
-            0 12px 26px rgba(6, 5, 12, 0.55);
+            0 0 0 4px var(--gold),
+            0 3px 0 rgba(0, 0, 0, 0.16),
+            0 10px 20px rgba(5, 40, 42, 0.3);
     }
     100% {
         transform: scale(1);
@@ -618,7 +636,7 @@ input:focus-visible {
     align-items: flex-end;
     justify-content: center;
     padding: calc(2.2rem + var(--safe-top)) 0 0;
-    background: rgba(7, 6, 14, 0.72);
+    background: rgba(6, 48, 50, 0.62);
     backdrop-filter: blur(3px);
     animation: overlay-in 200ms ease-out;
 }
@@ -641,11 +659,9 @@ input:focus-visible {
     max-width: 520px;
     max-height: 100%;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    color: var(--cream);
-    background: linear-gradient(180deg, #2b2542, #1a1729 40%);
-    box-shadow:
-        0 -1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 -20px 50px rgba(6, 5, 12, 0.7);
+    color: var(--card-ink);
+    background: linear-gradient(180deg, #ffffff, var(--card) 22%);
+    box-shadow: 0 -18px 44px rgba(5, 40, 42, 0.45);
     overflow: hidden;
     animation: panel-up 300ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -670,7 +686,7 @@ input:focus-visible {
     width: 2.6rem;
     height: 0.28rem;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.24);
+    background: rgba(58, 46, 36, 0.22);
     transform: translateX(-50%);
 }
 
@@ -696,10 +712,10 @@ input:focus-visible {
     height: 2.3rem;
     flex: none;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.09);
-    color: var(--cream);
+    background: var(--card-shade);
+    color: var(--card-ink);
     font-size: 1rem;
-    font-weight: 700;
+    font-weight: 900;
 }
 
 .panel-body {
@@ -716,7 +732,7 @@ input:focus-visible {
     margin: 0 0 1rem;
     font-size: 0.92rem;
     line-height: 1.5;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -727,25 +743,25 @@ input:focus-visible {
     margin: 0 0 1rem;
     padding: 0.95rem 1rem;
     border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(245, 184, 65, 0.2), rgba(245, 184, 65, 0.07));
-    box-shadow: var(--lift-1);
+    background: linear-gradient(180deg, #ffe9b8, #ffdd94);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
 }
 
 .prompt-card[data-kept="true"] {
-    background: linear-gradient(180deg, rgba(76, 195, 138, 0.24), rgba(76, 195, 138, 0.08));
+    background: linear-gradient(180deg, #c6f0cd, #a4e3ae);
 }
 
 .prompt-card h3 {
     margin: 0;
     font-size: 0.72rem;
-    font-weight: 800;
+    font-weight: 900;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--gold);
+    color: var(--gold-deep);
 }
 
 .prompt-card[data-kept="true"] h3 {
-    color: var(--color-confirmed);
+    color: var(--green-edge);
 }
 
 .prompt-brief {
@@ -753,7 +769,7 @@ input:focus-visible {
     font-size: 1.02rem;
     font-weight: 600;
     line-height: 1.35;
-    color: #fff;
+    color: var(--card-ink);
 }
 
 .prompt-meta {
@@ -766,7 +782,7 @@ input:focus-visible {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .nudge-budget {
@@ -777,12 +793,12 @@ input:focus-visible {
     margin: 0 0 0.7rem;
     padding: 0.6rem 0.85rem;
     border-radius: var(--radius);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--card-shade);
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .notes-list {
@@ -801,14 +817,14 @@ input:focus-visible {
     align-items: center;
     gap: 0.65rem;
     padding: 0.7rem 0.8rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.045);
+    border-radius: 16px;
+    background: var(--card-shade);
     text-align: left;
 }
 
 .note-entry[data-found="true"] {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
-    box-shadow: var(--lift-1);
+    background: linear-gradient(180deg, #ffffff, #fff2d6);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
 }
 
 .note-entry .mark {
@@ -817,11 +833,11 @@ input:focus-visible {
     width: 2.1rem;
     height: 2.1rem;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(58, 46, 36, 0.1);
     font-size: 0.86rem;
-    font-weight: 800;
+    font-weight: 900;
     font-variant-numeric: tabular-nums;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .note-entry[data-found="true"] .mark {
@@ -834,7 +850,7 @@ input:focus-visible {
     font-family: var(--font-serif);
     font-size: 1.06rem;
     font-weight: 400;
-    color: #fff;
+    color: var(--card-ink);
 }
 
 .note-entry .body span {
@@ -842,17 +858,17 @@ input:focus-visible {
     margin-top: 0.1rem;
     font-family: var(--font-hand);
     font-size: 0.82rem;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .note-entry[data-found="false"] .body strong {
     letter-spacing: 0.3em;
-    color: var(--muted);
-    opacity: 0.5;
+    color: var(--card-muted);
+    opacity: 0.45;
 }
 
 .note-entry[data-hinted="true"] .body span {
-    color: var(--gold);
+    color: var(--gold-edge);
 }
 
 .note-nudge {
@@ -861,16 +877,17 @@ input:focus-visible {
     width: 2.2rem;
     height: 2.2rem;
     border-radius: 50%;
-    background: linear-gradient(180deg, rgba(245, 184, 65, 0.32), rgba(245, 184, 65, 0.12));
-    box-shadow: var(--lift-1);
+    background: linear-gradient(180deg, var(--gold-glow), var(--gold));
+    box-shadow: 0 3px 0 var(--gold-edge);
     font-size: 1rem;
-    font-weight: 800;
-    color: var(--gold-glow);
-    transition: transform 110ms ease-out;
+    font-weight: 900;
+    color: #4a2c00;
+    transition: transform 90ms ease-out;
 }
 
 .note-nudge:active {
-    transform: scale(0.9);
+    transform: translateY(3px);
+    box-shadow: 0 0 0 var(--gold-edge);
 }
 
 .note-nudge:disabled {
@@ -885,7 +902,7 @@ input:focus-visible {
     font-weight: 600;
     letter-spacing: 0.05em;
     text-align: center;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -896,8 +913,8 @@ input:focus-visible {
     margin: 0 0 1rem;
     padding: 1.1rem 1rem;
     border-radius: var(--radius);
-    background: linear-gradient(160deg, rgba(245, 184, 65, 0.26), rgba(126, 102, 226, 0.2));
-    box-shadow: var(--lift-2);
+    background: linear-gradient(160deg, #ffe6ae, #ffd08a);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.1);
 }
 
 .kit-benefits {
@@ -912,7 +929,7 @@ input:focus-visible {
     display: grid;
     grid-template-columns: 1.4rem 1fr;
     gap: 0.5rem;
-    color: #fff;
+    color: var(--card-ink);
 }
 
 .kit-benefits li + li {
@@ -921,7 +938,7 @@ input:focus-visible {
 
 .kit-benefits li::before {
     content: "✦";
-    color: var(--gold);
+    color: var(--gold-deep);
 }
 
 .kit-price {
@@ -931,7 +948,7 @@ input:focus-visible {
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--gold);
+    color: var(--gold-edge);
 }
 
 .buy-button {
@@ -939,14 +956,14 @@ input:focus-visible {
     margin-top: 0.75rem;
     padding: 0.95rem 1rem;
     border-radius: var(--radius-pill);
-    color: #2a1c05;
-    background: linear-gradient(180deg, var(--gold-glow), var(--gold) 45%, var(--gold-deep));
+    color: #103d1c;
+    background: linear-gradient(180deg, #8ee49a, var(--green) 42%, var(--green-deep));
     box-shadow:
-        0 2px 0 rgba(255, 255, 255, 0.45) inset,
-        0 5px 0 #a3611b,
-        0 12px 22px rgba(6, 5, 12, 0.5);
-    font-size: 0.98rem;
-    font-weight: 800;
+        0 3px 0 rgba(255, 255, 255, 0.5) inset,
+        0 6px 0 var(--green-edge),
+        0 12px 20px rgba(5, 40, 42, 0.35);
+    font-size: 1rem;
+    font-weight: 900;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     transition:
@@ -955,16 +972,15 @@ input:focus-visible {
 }
 
 .buy-button:active {
-    transform: translateY(4px);
+    transform: translateY(5px);
     box-shadow:
-        0 2px 0 rgba(255, 255, 255, 0.4) inset,
-        0 1px 0 #a3611b,
-        0 5px 10px rgba(6, 5, 12, 0.5);
+        0 3px 0 rgba(255, 255, 255, 0.45) inset,
+        0 1px 0 var(--green-edge);
 }
 
 .buy-button:disabled {
-    color: var(--muted);
-    background: rgba(255, 255, 255, 0.07);
+    color: var(--card-muted);
+    background: var(--card-shade);
     box-shadow: none;
     transform: none;
     cursor: default;
@@ -982,8 +998,8 @@ input:focus-visible {
     flex-direction: column;
     gap: 0.35rem;
     padding: 0.6rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    background: var(--card-shade);
     text-align: left;
     transition: transform 120ms ease-out;
 }
@@ -993,8 +1009,8 @@ input:focus-visible {
 }
 
 .paper-swatch[data-active="true"] {
-    background: rgba(245, 184, 65, 0.16);
-    box-shadow: 0 0 0 2px var(--gold) inset;
+    background: #ffe9b8;
+    box-shadow: 0 0 0 3px var(--gold) inset;
 }
 
 .paper-chip {
@@ -1007,14 +1023,14 @@ input:focus-visible {
 
 .paper-swatch strong {
     font-size: 0.92rem;
-    font-weight: 700;
-    color: #fff;
+    font-weight: 800;
+    color: var(--card-ink);
 }
 
 .paper-swatch span:not(.paper-chip) {
     font-size: 0.72rem;
     line-height: 1.3;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .paper-swatch[data-locked="true"] {
@@ -1030,8 +1046,7 @@ input:focus-visible {
     margin: 1rem 0 0;
     font-size: 0.76rem;
     line-height: 1.45;
-    color: var(--muted);
-    opacity: 0.85;
+    color: var(--card-muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1045,8 +1060,8 @@ input:focus-visible {
     gap: 0.9rem;
     padding: 0.8rem 0.85rem;
     margin-bottom: 0.4rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.045);
+    border-radius: 16px;
+    background: var(--card-shade);
 }
 
 .setting-row > span:first-child {
@@ -1054,7 +1069,7 @@ input:focus-visible {
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: var(--cream);
+    color: var(--card-ink);
 }
 
 .toggle {
@@ -1063,13 +1078,12 @@ input:focus-visible {
     height: 1.9rem;
     flex: none;
     border-radius: var(--radius-pill);
-    background: rgba(0, 0, 0, 0.45);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
+    background: rgba(58, 46, 36, 0.22);
     transition: background 180ms ease-out;
 }
 
 .toggle[data-on="true"] {
-    background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+    background: linear-gradient(180deg, #8ee49a, var(--green-deep));
 }
 
 .toggle::after {
@@ -1099,21 +1113,21 @@ input:focus-visible {
     gap: 0.3rem;
     padding: 0.2rem;
     border-radius: var(--radius-pill);
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(58, 46, 36, 0.14);
 }
 
 .segmented button {
     padding: 0.4rem 0.8rem;
     border-radius: var(--radius-pill);
     font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--muted);
+    font-weight: 800;
+    color: var(--card-muted);
 }
 
 .segmented button[data-active="true"] {
-    color: #2a1c05;
+    color: #4a2c00;
     background: linear-gradient(180deg, var(--gold-glow), var(--gold));
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 0 var(--gold-edge);
 }
 
 .record-grid {
@@ -1123,27 +1137,27 @@ input:focus-visible {
 }
 
 .record-grid article {
-    padding: 0.9rem 0.85rem;
+    padding: 0.95rem 0.85rem;
     border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
-    box-shadow: var(--lift-1);
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.1);
 }
 
 .record-grid span {
     display: block;
     font-size: 0.68rem;
-    font-weight: 800;
+    font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--card-muted);
 }
 
 .record-grid strong {
     display: block;
     margin-top: 0.25rem;
-    font-size: 1.7rem;
-    font-weight: 800;
-    color: #fff;
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--card-ink);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1163,11 +1177,13 @@ input:focus-visible {
     margin: 0 auto;
     padding: 0.75rem 1.15rem;
     border-radius: var(--radius-pill);
-    color: #fff;
-    background: linear-gradient(180deg, #3b3358, #241f38);
-    box-shadow: var(--lift-2);
-    font-size: 0.88rem;
-    font-weight: 600;
+    color: var(--card-ink);
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 4px 0 rgba(0, 0, 0, 0.14),
+        0 12px 22px rgba(5, 40, 42, 0.32);
+    font-size: 0.9rem;
+    font-weight: 700;
     text-align: center;
     animation: toast-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -1189,12 +1205,12 @@ input:focus-visible {
     z-index: 8;
     display: grid;
     place-items: center;
-    background: rgba(7, 6, 14, 0.72);
+    background: rgba(6, 48, 50, 0.7);
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 900;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--cream);
 }
 
 .route-loading {
@@ -1202,9 +1218,9 @@ input:focus-visible {
     inset: 0;
     display: grid;
     place-items: center;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.12em;
-    color: var(--muted);
+    color: var(--cream);
 }
 
 .fatal-error {
@@ -1217,7 +1233,7 @@ input:focus-visible {
     gap: 0.6rem;
     padding: 2rem;
     color: var(--cream);
-    background: #141222;
+    background: #0c6265;
     text-align: center;
 }
 

@@ -4,23 +4,27 @@ The direction, stated once so it can be checked against.
 
 ## The idea
 
-**A warm sheet of paper inside a modern game.** The page is the only warm,
-tactile, analogue thing on screen — real fibre, real pigment, ink that
-granulates and darkens at its drying edges. Everything around it is a
-contemporary mobile-game chrome: a deep indigo shell, rounded surfaces lit from
-above, and one saturated gold accent.
+**A bright craft table.** A saturated teal ground, a warm wooden shelf of ink
+bottles, cream cards with chunky rounded edges and hard bottom bevels, and one
+amber accent for progress and reward. The page is a real sheet of rag paper and
+is the only quiet, tactile thing on screen — which is exactly why it holds the
+eye.
 
-That contrast is the whole design. The indigo is what makes the paper glow; an
-earlier brown "desk" made it muddy. The gold is what makes progress feel like a
-reward rather than a statistic.
+The direction went through two wrong turns worth recording. A sepia "field
+journal" read as a literary artefact rather than a game. A deep indigo shell
+read as a premium indie puzzle. Casual mobile is **high-key and saturated**: the
+background is bright, the cards are cream rather than dark, the buttons are
+thick and bevelled, and the type is heavy. Teal specifically, because it is the
+one hue none of the ten inks use, so every ink stays legible against it.
 
 Two rules keep it coherent:
 
 1. **On the page it is pigment.** The ink layer multiplies into the sheet, so
    the paper's grain, foxing and vignette read through every mark. Nothing UI
    is ever drawn onto the page except the first-run hint and the ruled border.
-2. **Off the page it is UI.** Deep indigo, rounded, top-lit, with gold reserved
-   for things the player earned — progress meters, discovery stars, unlocks.
+2. **Off the page it is a toy.** Saturated ground, wooden shelf, cream cards,
+   thick bottom-bevelled buttons. Amber is reserved for things the player
+   earned.
 
 ## The surface recipe
 
@@ -29,11 +33,15 @@ buttons, note cards — is built the same way. That repetition is what makes it
 feel like one object rather than a pile of components.
 
 ```
-background : top-lit linear gradient (lighter → darker)
-inset rim  : 1px white at ~10% along the top edge
-drop shadow: a tight one and a wide one, both warm-black
-radius     : 14–26px, generous like a native control
+background  : top-lit linear gradient (lighter → darker)
+bottom edge : a hard 3–8px darker edge, no blur — this is the casual-game
+              signature, and it is what makes a button feel pressable
+drop shadow : one soft shadow under the hard edge
+radius      : 16–30px, chunkier than product UI
 ```
+
+Pressing a control translates it *down onto its own bottom edge* rather than
+scaling it. That is the interaction that reads as physical.
 
 The Pixi shelf follows the identical recipe with layered fills, because Pixi
 Graphics has no gradient primitive.
@@ -42,14 +50,13 @@ Graphics has no gradient primitive.
 
 | Role | Value | Where |
 | --- | --- | --- |
-| Shell | `#141222` → `#0b0a13` | The frame behind everything |
-| Surface | `#322b4d` → `#241f38` | Shelf plank, cards, buttons, panels |
+| Shell | `#1cadaa` → `#0a5457` | The teal ground behind everything |
+| Wood | `#c98f55` → `#5f3a1b` | The shelf plank and its recessed slots |
+| Card | `#fff8ea` / `#f2e3c9` | Panels, chips, pills, the reward toast |
+| Card ink | `#3a2e24`, muted `#8b7a68` | Type on cream |
 | Paper | `#fcf9f0` | The default Rag sheet |
-| Ink | `#2a2622` | Ruled border and on-page marginalia |
-| Cream | `#f4eedd` | Primary type on the shell |
-| Muted | `#9d95c2` | Secondary type, captions, disabled |
-| Gold | `#f5b841` (deep `#d8862a`, glow `#ffd98a`) | Progress, discoveries, unlocks, the CTA |
-| Confirmed | `#4cc38a` | A kept daily prompt |
+| Amber | `#ffb92e` (deep `#dc8a11`, edge `#a4620a`) | Progress, discoveries, unlocks, selection |
+| Green | `#5cc96b` (deep `#34a04b`, edge `#237035`) | The primary call to action, toggles |
 
 The ten inks carry their own colours (`src/game/sim/elements.ts`) and the twenty
 discoveries each carry an accent used for their star, their journal medal, and
@@ -57,7 +64,7 @@ the rim flash when they are found (`src/game/sim/discoveries.ts`).
 
 ## Type
 
-- **UI voice** — the system sans at 700–800 weight. This is what reads as a game
+- **UI voice** — the system sans at 800–900 weight. This is what reads as a game
   on a phone, and it ships no font. Used for every control, label, count and
   heading.
 - **Identity** — `Iowan Old Style / Palatino / Georgia / serif` for the wordmark
@@ -85,9 +92,15 @@ game itself.
   wide, so even a one-cell blur turns a pile of sand into a brown cloud and
   destroys the grain. Bilinear magnification supplies exactly enough softness.
   Only the wet halo underneath gets a wide blur.
-- **Shelf** (`scene/handDrawn.ts`) — corked apothecary bottles with glass, ink
-  level, specular stripe and contact shadow; the eraser, brush and torn-sheet
-  icons; the gold lock disc.
+- **Shelf** (`scene/handDrawn.ts`) — corked bottles drawn for the size they are
+  actually seen at, roughly 40 design units: the silhouette is filled with the
+  ink itself so the eye reads "the blue one" first, with a darker lower half, a
+  meniscus, one specular stripe, a light rim and a lit cork. Locked bottles are
+  slate with a hint of their colour — a low-alpha tint just becomes more wood —
+  and wear an amber badge in the corner rather than over the middle.
+- **Title hero** (`ui/TitleScreen.tsx`) — three SVG bottles and a falling drop.
+  This replaced a crop of the store tile, which at hero size was an unreadable
+  smear: a screenshot of a simulation is not an illustration.
 - **Audio** (`audio/inkAudio.ts`) — a nib on rag paper, fire ticking at a
   density driven by the simulation's burning-cell count, a gold chime for a
   discovery, a sparse D-dorian bed, and a continuous *page voice* that follows
@@ -109,9 +122,14 @@ Shared timings in `scene/palette.ts`.
 
 - The CTA has a hard bottom edge and depresses into it — a physical key press.
 - The progress chip punches when the count changes.
-- Picking a bottle *pops* it — a scale overshoot that settles. The left-right
-  shake is reserved for tapping a locked bottle, because a shake universally
-  reads as "no"; using it for selection made every pick feel like an error.
+- Picking a bottle *pops* it — a scale overshoot that settles — and lifts it
+  onto a bright amber card. The left-right shake is reserved for tapping a
+  locked bottle, because a shake universally reads as "no"; using it for
+  selection made every pick feel like an error.
+  The pop is applied as a **size multiplier, never a scale transform**: Pixi
+  composes `scaleTransform` after `translateTransform` such that the existing
+  translation is scaled too, which at a shelf y of ~1400 design units threw the
+  bottle 200 units down the screen.
 - A discovery fires three things at once: a particle burst at the cell, a rim
   of the discovery's own colour racing around the sheet, and a reward card
   sliding down from the top. The rim matters most: the player is usually
