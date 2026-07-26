@@ -1,0 +1,34 @@
+{
+  "client": {
+    "values": {
+      "inkbloom_runtime": {
+        "dailyPromptEnabled": true,
+        "notificationDelaySeconds": 86400
+      },
+      "inkbloom_monetization": {
+        "enabled": true,
+        "purchasesEnabled": true,
+        "rewardedAdsEnabled": true,
+        "interstitialAdsEnabled": false,
+        "placements": {
+          "margin_nudge": {
+            "enabled": true,
+            "cooldownSeconds": 45,
+            "sessionCap": 6,
+            "dailyCap": 3,
+            "rewardMultiplier": 1
+          }
+        },
+        "products": {
+          "illuminators_kit": { "enabled": true }
+        }
+      }
+    },
+    "overrides": [],
+    "experiments": []
+  },
+  "server": {
+    "values": {},
+    "overrides": []
+  }
+}

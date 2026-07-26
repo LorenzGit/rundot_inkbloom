@@ -1,0 +1,29 @@
+# Local dependencies and generated output
+node_modules/
+dist/
+*.tsbuildinfo
+*.tgz
+
+# Credentials and machine-specific RUN state
+.env
+.env.*
+!.env.example
+game.config.playground.json
+.rundot/
+rundot-session*
+player-snapshot*
+campaign-state*
+
+# Transient QA and editor output
+coverage/
+playwright-report/
+test-results/
+screenshots/
+tmp/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

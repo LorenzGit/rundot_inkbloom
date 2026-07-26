@@ -1,0 +1,30 @@
+{
+  "items": [
+    {
+      "itemId": "inkbloom_illuminators_kit",
+      "name": "The Illuminator's Kit",
+      "description": "Three more sheets — vellum, nocturne and blueprint — the mirror nib, and nudges with no daily limit. Every one of the twenty secrets stays free to find without it.",
+      "category": "non_consumable",
+      "price": { "type": "bucks", "value": "400" },
+      "entitlements": [
+        {
+          "entitlementId": "inkbloom_illuminators_kit",
+          "quantity": 1,
+          "consumable": false
+        }
+      ],
+      "assets": {},
+      "unique": true,
+      "active": true,
+      "regions": [],
+      "refundEligible": true,
+      "refundWindowHours": 24,
+      "tags": ["inkbloom", "durable", "cosmetic", "tools"],
+      "sortOrder": 1,
+      "releasedAt": null,
+      "expiresAt": null
+    }
+  ],
+  "sales": [],
+  "collections": []
+}

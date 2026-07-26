@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Inkbloom thumbnail generator</title>
+<style>
+  body { margin: 0; background: #14100c; display: grid; place-items: center; height: 100vh; }
+  canvas { image-rendering: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+</style>
+</head>
+<body>
+<canvas id="thumb" width="512" height="512"></canvas>
+<script type="module">
+/**
+ * The store thumbnail, rendered by the game itself.
+ *
+ * The tile is not an illustration *of* Inkbloom — it is a real page produced by
+ * the real simulation: a briar grown up a sheet, set alight from one side, with
+ * water pooled at the foot of it. Nothing here is drawn by hand, so the tile can
+ * never drift away from what the game actually looks like.
+ *
+ * Deterministic: the same seed always produces the same tile.
+ *
+ * Run through the dev server (`npm run dev`), open
+ * `http://localhost:<port>/scripts/thumbnail.html`, then read
+ * `window.__thumbnail()` for a JPEG data URL.
+ */
+import { InkSim } from "/src/game/sim/inkSim.ts";
+import * as E from "/src/game/sim/elements.ts";
+import { createPaperTexture } from "/src/game/scene/paperTexture.ts";
+import { paperStyle } from "/src/game/scene/papers.ts";
+
+const SIZE = 512;
+const SW = 150;
+const SH = 200;
+
+const sim = new InkSim({ width: SW, height: SH, seed: 0x1b10_0a55 });
+
+function block(x0, y0, x1, y1, element, life = 0, burn = 0) {
+    for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+            const i = y * SW + x;
+            sim.cells[i] = element;
+            sim.life[i] = life;
+            sim.burn[i] = burn;
+        }
+    }
+}
+
+// A composition, not a screenshot.
+//
+// The thicket is grown rather than drawn: stems of varying height are planted
+// on an ochre bank and left to climb and flower for a few hundred steps, which
+// is what gives the silhouette its irregular, living edge. Only then is a fire
+// set on the right, so the tile catches the exact moment the game is about —
+// something beautiful, halfway through becoming something else.
+function bank() {
+    for (let x = 0; x < SW; x++) {
+        const height = 10 + Math.round(4 * Math.sin(x * 0.09) + 3 * Math.sin(x * 0.31 + 1.7));
+        block(x, SH - height, x, SH - 1, E.GRIT);
+    }
+}
+
+function pool() {
+    block(6, 176, 48, 186, E.RILL);
+}
+
+function plant() {
+    for (let x = 12; x < 140; x += 2) {
+        const height = 46 + Math.round(20 * Math.sin(x * 0.07 + 0.4) + 11 * Math.sin(x * 0.23) + 6 * Math.sin(x * 0.53));
+        block(x, 182 - height, x, 182, E.BRIAR, 200);
+    }
+}
+
+bank();
+pool();
+plant();
+
+// Grow: stems climb, drink, and open.
+for (let step = 0; step < 900; step++) {
+    sim.step();
+    sim.takeDiscoveries();
+}
+
+// Then set the right-hand side alight and let it run just long enough to read.
+block(132, 120, 138, 176, E.EMBER, 240);
+for (let step = 0; step < 150; step++) {
+    sim.step();
+    sim.takeDiscoveries();
+}
+
+const canvas = document.getElementById("thumb");
+const context = canvas.getContext("2d");
+const style = paperStyle("rag");
+
+// Desk, then the sheet, inset so the tile reads as an object on a table.
+const desk = context.createRadialGradient(SIZE / 2, SIZE * 0.36, SIZE * 0.12, SIZE / 2, SIZE / 2, SIZE * 0.86);
+desk.addColorStop(0, "#3a2f22");
+desk.addColorStop(1, "#140f0a");
+context.fillStyle = desk;
+context.fillRect(0, 0, SIZE, SIZE);
+
+const inset = 26;
+const pageW = SIZE - inset * 2;
+const pageH = SIZE - inset * 2;
+
+context.save();
+context.shadowColor = "rgba(0,0,0,0.65)";
+context.shadowBlur = 26;
+context.shadowOffsetY = 8;
+context.fillStyle = style.base;
+context.fillRect(inset, inset, pageW, pageH);
+context.restore();
+
+// The procedural sheet the game actually uses.
+const paper = createPaperTexture({ width: pageW, height: pageH, seed: 0x51e3_7a11, style, detailed: true });
+context.drawImage(paper.source.resource, inset, inset, pageW, pageH);
+
+// The ink, painted with the shipping colour rules, then multiplied into the
+// sheet exactly as the renderer does.
+const ink = document.createElement("canvas");
+ink.width = SW;
+ink.height = SH;
+const inkContext = ink.getContext("2d");
+const image = inkContext.createImageData(SW, SH);
+const words = new Uint32Array(image.data.buffer);
+
+const { createSimTexture } = await import("/src/game/scene/simTexture.ts");
+// The texture module owns the colour rules; borrow them by rendering one frame
+// into a throwaway texture and copying its buffer.
+const texture = createSimTexture(SW, SH);
+texture.update(sim, false);
+const source = texture.mark.source.resource;
+for (let i = 0; i < SW * SH; i++) {
+    const o = i * 4;
+    const a = source[o + 3];
+    // The buffer is premultiplied; canvas ImageData is not.
+    const scale = a === 0 ? 0 : 255 / a;
+    words[i] =
+        ((a << 24) |
+            ((Math.min(255, source[o + 2] * scale) | 0) << 16) |
+            ((Math.min(255, source[o + 1] * scale) | 0) << 8) |
+            (Math.min(255, source[o] * scale) | 0)) >>>
+        0;
+}
+inkContext.putImageData(image, 0, 0);
+
+context.save();
+context.globalCompositeOperation = "multiply";
+context.imageSmoothingEnabled = true;
+context.globalAlpha = 0.34;
+context.filter = "blur(6px)";
+context.drawImage(ink, inset, inset, pageW, pageH);
+context.globalAlpha = 0.96;
+context.filter = "blur(2px)";
+context.drawImage(ink, inset, inset, pageW, pageH);
+context.restore();
+
+// Hand-ruled border.
+context.strokeStyle = "rgba(42,38,34,0.2)";
+context.lineWidth = 2.4;
+context.strokeRect(inset + 10, inset + 10, pageW - 20, pageH - 20);
+
+// The wordmark is written ON the page in the same ink as everything else,
+// because that is what this object is: a titled page in a working journal.
+context.save();
+context.translate(SIZE / 2, inset + 76);
+context.textAlign = "center";
+context.fillStyle = "rgba(36,32,28,0.94)";
+context.font = '600 58px "Iowan Old Style", Palatino, Georgia, serif';
+context.fillText("Inkbloom", 0, 0);
+context.fillStyle = "rgba(42,38,34,0.6)";
+context.font = '400 20px "Bradley Hand", "Chalkboard SE", cursive';
+context.fillText("paint inks that live", 0, 30);
+// A ruled underline, the way a heading gets underlined by hand.
+context.strokeStyle = "rgba(42,38,34,0.3)";
+context.lineWidth = 2;
+context.beginPath();
+context.moveTo(-118, 46);
+context.lineTo(118, 44);
+context.stroke();
+context.restore();
+
+window.__thumbnail = () => canvas.toDataURL("image/jpeg", 0.92);
+document.title = "ready";
+</script>
+</body>
+</html>

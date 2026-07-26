@@ -1,0 +1,57 @@
+KEY,English,PortugueseBR,SpanishLA
+ButtonBack,‹ BACK,‹ VOLTAR,‹ ATRÁS
+ButtonClose,CLOSE,FECHAR,CERRAR
+ButtonOpenPage,OPEN THE PAGE,ABRIR A PÁGINA,ABRIR LA PÁGINA
+ButtonContinue,BACK TO THE PAGE,VOLTAR À PÁGINA,VOLVER A LA PÁGINA
+MenuFieldNotes,FIELD NOTES,ANOTAÇÕES,APUNTES
+MenuShop,THE KIT,O ESTOJO,EL ESTUCHE
+MenuStats,RECORD,REGISTRO,REGISTRO
+MenuSettings,SETTINGS,OPÇÕES,AJUSTES
+Tagline,paint inks that live,tintas que ganham vida,tintas que cobran vida
+TitleBlurb,"Mix inks that pile, flow, burn and bloom — and catch them keeping secrets.","Misture tintas que empilham, escorrem, queimam e florescem — e flagre seus segredos.","Mezcla tintas que se apilan, fluyen, arden y florecen — y descubre sus secretos."
+HintFirstTouch,"paint anywhere — mix inks, find their secrets",pinte em qualquer lugar — misture tintas e ache segredos,pinta donde quieras — mezcla tintas y halla secretos
+DiscoveriesLabel,discoveries,descobertas,descubrimientos
+FieldNotesTitle,Field Notes,Anotações de Campo,Apuntes de Campo
+FieldNotesUnfound,· · · · ·,· · · · ·,· · · · ·
+FieldNotesUnlockLine,new inks arrive at 4 · 8 · 12 · 16 discoveries,novas tintas chegam com 4 · 8 · 12 · 16 descobertas,nuevas tintas llegan con 4 · 8 · 12 · 16 descubrimientos
+NudgeFree,ASK THE MARGIN,PERGUNTAR À MARGEM,PREGUNTAR AL MARGEN
+NudgeWatch,WATCH FOR A NUDGE,VER VÍDEO POR UMA DICA,VER VIDEO POR UNA PISTA
+NudgeSpentToday,nothing more today,nada mais por hoje,nada más por hoy
+NudgeKit,the Kit answers as often as you ask,o Estojo responde sempre que quiser,el Estuche responde cuando quieras
+PromptTitle,Today's Page,A Página de Hoje,La Página de Hoy
+PromptKept,KEPT,CUMPRIDA,CUMPLIDA
+PromptStreak,[n]-day run,sequência de [n] dias,racha de [n] días
+PromptWaiting,waiting for trusted RUN time,aguardando o horário confiável do RUN,esperando la hora confiable de RUN
+PromptLocalClock,device clock · not authoritative,relógio do aparelho · não confiável,reloj del dispositivo · no confiable
+KitTitle,The Illuminator's Kit,O Estojo do Iluminador,El Estuche del Iluminador
+KitBlurb,"Three more sheets, the mirror nib, and nudges without a daily limit. Every secret stays free to find.","Mais três folhas, a pena espelhada e dicas sem limite diário. Todo segredo continua livre para achar.","Tres hojas más, la plumilla espejo y pistas sin límite diario. Todo secreto sigue siendo gratis de hallar."
+KitOwned,IN YOUR KIT,NO SEU ESTOJO,EN TU ESTUCHE
+KitUnavailable,UNAVAILABLE OUTSIDE A RUN HOST,INDISPONÍVEL FORA DO RUN,NO DISPONIBLE FUERA DE RUN
+KitPending,ORDER STILL SETTLING — REOPEN TO RETRY,PEDIDO EM PROCESSAMENTO — REABRA PARA TENTAR,PEDIDO EN PROCESO — REABRE PARA REINTENTAR
+KitPurchase,GET THE KIT,OBTER O ESTOJO,OBTENER EL ESTUCHE
+PapersTitle,Sheets,Folhas,Hojas
+PapersLocked,in the Kit,no Estojo,en el Estuche
+StatsDiscoveries,SECRETS FOUND,SEGREDOS ACHADOS,SECRETOS HALLADOS
+StatsPagesTorn,SHEETS USED,FOLHAS USADAS,HOJAS USADAS
+StatsStrokes,MARKS MADE,MARCAS FEITAS,MARCAS HECHAS
+StatsStreak,BEST PROMPT RUN,MELHOR SEQUÊNCIA,MEJOR RACHA
+SettingsLanguage,LANGUAGE,IDIOMA,IDIOMA
+SettingsMusic,AMBIENCE,AMBIENTE,AMBIENTE
+SettingsSfx,SOUND,SOM,SONIDO
+SettingsMusicVolume,AMBIENCE VOLUME,VOLUME DO AMBIENTE,VOLUMEN DE AMBIENTE
+SettingsSfxVolume,SOUND VOLUME,VOLUME DO SOM,VOLUMEN DE SONIDO
+SettingsHaptics,HAPTICS,VIBRAÇÃO,VIBRACIÓN
+SettingsNotifications,NOTIFICATIONS,NOTIFICAÇÕES,NOTIFICACIONES
+SettingsReducedMotion,REDUCED MOTION,MOVIMENTO REDUZIDO,MOVIMIENTO REDUCIDO
+SettingsQuality,DETAIL,DETALHE,DETALLE
+SettingsHigh,HIGH,ALTA,ALTA
+SettingsLow,LOW,BAIXA,BAJA
+SettingsUnavailable,UNAVAILABLE OUTSIDE RUN HOST,INDISPONÍVEL FORA DO RUN,NO DISPONIBLE FUERA DE RUN
+LoadingLine,ruling the page…,riscando a página…,rayando la página…
+Paused,paused,pausado,en pausa
+ToastSheetTorn,a clean sheet,uma folha limpa,una hoja limpia
+ToastAdCancelled,no nudge — the video was closed early,sem dica — o vídeo foi fechado antes,sin pista — el video se cerró antes
+ToastAdFailed,no nudge — try again in a moment,sem dica — tente de novo em instantes,sin pista — inténtalo en un momento
+ToastKitThanks,the Kit is yours — three new sheets on the shelf,o Estojo é seu — três folhas novas na prateleira,el Estuche es tuyo — tres hojas nuevas en el estante
+NotificationTitle,The ink is still wet,A tinta ainda está molhada,La tinta sigue húmeda
+NotificationReEngagementBody,"A fresh sheet is waiting, and the page still has secrets you have not caught.","Uma folha nova espera, e a página ainda guarda segredos.","Una hoja nueva espera, y la página aún guarda secretos."

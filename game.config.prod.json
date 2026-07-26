@@ -1,0 +1,8 @@
+{
+  "gameId": "REPLACE_WITH_RUN_GAME_ID",
+  "relativePathToDistFolder": "dist",
+  "usesPreloader": false,
+  "orientation": "Portrait",
+  "keywords": ["sandbox", "falling sand", "painting", "discovery", "relaxing", "physics", "creative", "puzzle"],
+  "kitId": null
+}
