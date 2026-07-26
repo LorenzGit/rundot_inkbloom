@@ -27,6 +27,7 @@ import {
     drawBottle,
     drawBrushIcon,
     drawEraser,
+    drawLockDisc,
     drawNib,
     drawTornSheetIcon,
     starPath,
@@ -63,9 +64,11 @@ export interface Scene {
 }
 
 /** Layout in design units. The short edge is fixed at 720 by `stage.ts`. */
-const MARGIN = 22;
-const SHELF_ROWS_GAP = 74;
-const SHELF_PAD = 26;
+const PAGE_MARGIN = 15;
+/** Gap between the bottom of the sheet and the lip of the shelf. */
+const PAGE_TO_SHELF = 16;
+/** Reserved for the React header bar above the canvas (wordmark + counter). */
+const HEADER_RESERVE = 118;
 
 type ShelfKind = "ink" | "brush" | "tear" | "mirror";
 
@@ -293,26 +296,25 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const safeLeft = insets.left / scale;
         const safeRight = insets.right / scale;
 
-        // The React header bar sits above the canvas; reserve its height so the
-        // page never slides under the wordmark or the discovery counter.
-        const headerHeight = 88 + safeTop;
+        const headerHeight = HEADER_RESERVE + safeTop;
 
-        const slotCount = INKS.length;
-        const shelfInnerWidth = width - safeLeft - safeRight - SHELF_PAD * 2;
-        const slotPitch = shelfInnerWidth / slotCount;
-        const bottleSize = Math.max(30, Math.min(52, slotPitch - 8));
-        shelf.height = SHELF_PAD * 2 + bottleSize + SHELF_ROWS_GAP + bottleSize * 0.5 + safeBottom;
+        // The shelf is sized by its contents, not by a share of the screen, so
+        // the bottles are the same comfortable size on every phone and the
+        // sheet gets everything that is left.
+        const slotPitch = (width - safeLeft - safeRight - 12) / INKS.length;
+        const bottleSize = Math.max(34, Math.min(62, slotPitch - 4));
+        const toolSize = Math.max(30, Math.min(46, bottleSize * 0.8));
+        shelf.height = 44 + bottleSize * 1.15 + 26 + toolSize * 1.3 + 22 + safeBottom;
         shelf.top = height - shelf.height;
 
-        const available = shelf.top - headerHeight - MARGIN;
-        const maxWidth = width - safeLeft - safeRight - MARGIN * 2;
-        const pageHeight = Math.min(available, (maxWidth * SIM_HEIGHT) / SIM_WIDTH);
-        page.h = Math.max(120, pageHeight);
+        const usableWidth = width - safeLeft - safeRight - PAGE_MARGIN * 2;
+        const band = shelf.top - headerHeight - PAGE_TO_SHELF;
+        page.h = Math.max(160, Math.min(band, (usableWidth * SIM_HEIGHT) / SIM_WIDTH));
         page.w = (page.h * SIM_WIDTH) / SIM_HEIGHT;
         page.x = safeLeft + (width - safeLeft - safeRight - page.w) / 2;
-        // Weighted upward: an even split leaves the header stranded in a
-        // band of empty desk on tall phones.
-        page.y = headerHeight + (available - page.h) * 0.42;
+        // Weighted upward: the header already occupies the top, so leftover
+        // desk belongs below the sheet where it meets the shelf.
+        page.y = headerHeight + (band - page.h) * 0.4;
 
         paperSprite.position.set(page.x, page.y);
         paperSprite.width = page.w;
@@ -326,19 +328,46 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         tornSprite.width = page.w;
         tornSprite.height = page.h;
 
-        pageShadow.clear();
-        pageShadow.rect(page.x - 3, page.y - 2, page.w + 6, page.h + 10).fill({ color: 0x000000, alpha: 0.34 });
-        pageShadow.rect(page.x - 8, page.y + 2, page.w + 16, page.h + 18).fill({ color: 0x000000, alpha: 0.16 });
+        drawPageShadow();
 
         hintLine.anchor.set(0.5, 1);
-        hintLine.position.set(page.x + page.w / 2, page.y + page.h - 16);
-        hintLine.style.fontSize = Math.max(13, page.w * 0.031);
+        hintLine.position.set(page.x + page.w / 2, page.y + page.h - 18);
+        hintLine.style.fontSize = Math.max(13, page.w * 0.032);
 
-        layoutShelf(width, bottleSize, slotPitch, safeLeft, safeRight);
+        layoutShelf(width, safeLeft, safeRight, bottleSize, toolSize, slotPitch);
         layoutLockMarks();
+        layoutToolCaptions();
         drawRule();
         drawDesk();
         rebuildPaperIfPageResized();
+    }
+
+    /**
+     * The sheet's shadow.
+     *
+     * Three stacked shadows rather than one: a tight dark contact shadow that
+     * anchors the sheet to the desk, and two progressively wider, fainter ones
+     * that lift it off. A rim of warm light along the top edge finishes the
+     * illusion — without it the sheet reads as a hole cut in the desk.
+     */
+    function drawPageShadow(): void {
+        pageShadow.clear();
+        for (const [spread, drop, alpha] of [
+            [26, 22, 0.16],
+            [13, 11, 0.22],
+            [4, 3, 0.3],
+        ] as const) {
+            pageShadow.roundRect(
+                page.x - spread,
+                page.y - spread * 0.35 + drop,
+                page.w + spread * 2,
+                page.h + spread,
+                5,
+            );
+            pageShadow.fill({ color: 0x000000, alpha });
+        }
+        pageShadow.rect(page.x - 1, page.y - 1.5, page.w + 2, 1.5);
+        pageShadow.fill({ color: CREAM, alpha: 0.28 });
     }
 
     let lastPaperWidth = 0;
@@ -352,65 +381,84 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
     function layoutShelf(
         width: number,
-        bottleSize: number,
-        slotPitch: number,
         safeLeft: number,
         safeRight: number,
+        bottleSize: number,
+        toolSize: number,
+        slotPitch: number,
     ): void {
         shelfItems = [];
-        const rowOneY = shelf.top + SHELF_PAD + bottleSize * 0.62;
-        const startX = safeLeft + SHELF_PAD + slotPitch / 2;
+        // Offsets are measured down from the tray lip, so a tall phone gets a
+        // deeper plank rather than the same controls spread thinly across it.
+        // A bottle's cork reaches about 0.7 of its size above centre, so the
+        // first row has to clear the label by that much or they collide.
+        const labelY = shelf.top + 19;
+        const rowOneY = shelf.top + 44 + bottleSize * 0.7;
+        const rowTwoY = rowOneY + bottleSize * 0.45 + 26 + toolSize * 0.6;
+
+        const startX = safeLeft + 6 + slotPitch / 2;
         for (let slot = 0; slot < INKS.length; slot++) {
             shelfItems.push({ kind: "ink", index: slot, x: startX + slot * slotPitch, y: rowOneY, size: bottleSize });
         }
 
         const tools: ShelfKind[] = mirror ? ["brush", "mirror", "tear"] : ["brush", "tear"];
-        const toolSize = Math.min(52, bottleSize + 4);
-        const toolPitch = toolSize * 2.5;
+        const toolPitch = toolSize * 3;
         const centre = safeLeft + (width - safeLeft - safeRight) / 2;
-        const rowTwoY = rowOneY + SHELF_ROWS_GAP + toolSize * 0.2;
         tools.forEach((kind, position) => {
             const offset = (position - (tools.length - 1) / 2) * toolPitch;
             shelfItems.push({ kind, index: -1, x: centre + offset, y: rowTwoY, size: toolSize });
         });
 
-        shelfLabel.anchor.set(0.5, 1);
-        shelfLabel.position.set(centre, shelf.top + SHELF_PAD * 0.55);
-        shelfLabel.style.fontSize = Math.max(14, bottleSize * 0.38);
+        shelfLabel.anchor.set(0.5, 0.5);
+        shelfLabel.position.set(centre, labelY);
+        shelfLabel.style.fontSize = Math.max(15, bottleSize * 0.34);
     }
 
     // -------------------------------------------------------------- shelf draw
 
     function drawShelf(): void {
         const width = stage.designWidth();
+        const style = paperStyle(currentPaper);
         shelfGraphics.clear();
-        shelfGraphics.rect(0, shelf.top, width, shelf.height).fill({ color: 0xffffff, alpha: 0.035 });
-        shelfGraphics
-            .moveTo(18, shelf.top + 1.5)
-            .lineTo(width - 18, shelf.top + 1.5)
-            .stroke({ width: 1.5, color: CREAM, alpha: 0.16 });
+
+        // The tray: a plank of the desk, lit along its front lip. Layered fills
+        // stand in for a gradient, which Pixi Graphics has no primitive for.
+        const top = shelf.top;
+        const bottom = stage.designHeight();
+        shelfGraphics.rect(0, top, width, bottom - top).fill({ color: style.deskLamp, alpha: 0.5 });
+        const bands = 7;
+        for (let band = 0; band < bands; band++) {
+            const t = band / bands;
+            shelfGraphics.rect(0, top + (bottom - top) * t, width, (bottom - top) / bands + 1);
+            shelfGraphics.fill({ color: 0x000000, alpha: 0.05 + t * 0.14 });
+        }
+        // The lip, and the shadow the page casts onto it.
+        shelfGraphics.rect(0, top, width, 2.5).fill({ color: CREAM, alpha: 0.2 });
+        shelfGraphics.rect(0, top + 2.5, width, 14).fill({ color: 0x000000, alpha: 0.22 });
 
         const discoveries = store.get().discoveryCount;
         for (const item of shelfItems) {
             const wiggle = item.kind === "ink" ? (wiggles[item.index] ?? 0) : 0;
             const isSelected = item.kind === "ink" && item.index === selected;
+            const ink = item.kind === "ink" ? INKS[item.index] : undefined;
+            const locked = item.kind === "ink" && !isInkUnlocked(item.index, discoveries);
+
+            // A selected bottle stands in a pool of its own colour.
+            if (isSelected && !locked && ink) {
+                shelfGraphics.ellipse(item.x, item.y + item.size * 0.52, item.size * 0.62, item.size * 0.2);
+                shelfGraphics.fill({ color: ink.colour, alpha: 0.22 });
+                shelfGraphics.ellipse(item.x, item.y + item.size * 0.52, item.size * 0.46, item.size * 0.13);
+                shelfGraphics.stroke({ width: Math.max(1.8, item.size * 0.06), color: ink.colour, alpha: 0.9 });
+            }
+
             shelfGraphics.save();
-            shelfGraphics.translateTransform(item.x, item.y + (isSelected ? -item.size * 0.1 : 0));
+            shelfGraphics.translateTransform(item.x, item.y + (isSelected ? -item.size * 0.12 : 0));
             if (wiggle > 0) shelfGraphics.rotateTransform(Math.sin(wiggle * 24) * 0.13 * wiggle);
 
-            if (item.kind === "ink") {
-                const ink = INKS[item.index];
-                if (!ink) {
-                    shelfGraphics.restore();
-                    continue;
-                }
-                const locked = !isInkUnlocked(item.index, discoveries);
+            if (item.kind === "ink" && ink) {
                 if (item.index === ERASER_INDEX) drawEraser(shelfGraphics, item.size, true);
                 else drawBottle(shelfGraphics, { size: item.size, colour: ink.colour, locked, onDesk: true });
-                if (isSelected && !locked) {
-                    shelfGraphics.ellipse(0, item.size * 0.5, item.size * 0.42, item.size * 0.12);
-                    shelfGraphics.stroke({ width: Math.max(1.8, item.size * 0.07), color: ink.colour, alpha: 0.95 });
-                }
+                if (locked) drawLockDisc(shelfGraphics, item.size);
             } else if (item.kind === "brush") {
                 drawBrushIcon(shelfGraphics, item.size, largeBrush, INKS[selected]?.colour ?? GILT, true);
             } else if (item.kind === "mirror") {
@@ -421,7 +469,6 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             shelfGraphics.restore();
         }
 
-        // Locked bottles carry their requirement so the shelf explains itself.
         refreshLockMarks(discoveries);
     }
 
@@ -461,6 +508,42 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         return mark;
     });
     shelfGroup.addChild(lockLayer);
+
+    /**
+     * Captions under the two tools.
+     *
+     * The bottles explain themselves — they are bottles — but a pair of
+     * abstract marks does not, and "what does the torn page do" is exactly the
+     * question you cannot afford a player to answer by tapping it.
+     */
+    const toolCaptions = new Map<ShelfKind, Text>();
+    for (const [kind, label] of [
+        ["brush", "size"],
+        ["mirror", "mirror"],
+        ["tear", "new sheet"],
+    ] as const) {
+        const caption = new Text({
+            text: label,
+            style: new TextStyle({ fontFamily: HAND, fontSize: 13, fill: CREAM, align: "center" }),
+        });
+        caption.anchor.set(0.5, 0);
+        caption.alpha = 0.5;
+        caption.visible = false;
+        shelfGroup.addChild(caption);
+        toolCaptions.set(kind, caption);
+    }
+
+    function layoutToolCaptions(): void {
+        for (const caption of toolCaptions.values()) caption.visible = false;
+        for (const item of shelfItems) {
+            if (item.kind === "ink") continue;
+            const caption = toolCaptions.get(item.kind);
+            if (!caption) continue;
+            caption.style.fontSize = Math.max(11, item.size * 0.29);
+            caption.position.set(item.x, item.y + item.size * 0.46);
+            caption.visible = true;
+        }
+    }
 
     function layoutLockMarks(): void {
         for (const mark of lockMarks) mark.visible = false;

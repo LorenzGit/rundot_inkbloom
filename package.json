@@ -29,7 +29,8 @@
     "build:bundled": "npm run typecheck && cross-env RUNDOT_GAME_DISABLE_EMBEDDED_LIBS=true vite build && node scripts/check-build.mjs bundled",
     "check": "npm run format:check && npm run lint && npm run test && npm run audit:public && npm run build && npm run build:bundled",
     "preview": "vite preview",
-    "thumbnail": "node scripts/make-thumbnail.mjs"
+    "thumbnail": "node scripts/make-thumbnail.mjs",
+    "visual-qa": "node scripts/visual-qa.mjs"
   },
   "dependencies": {
     "@series-inc/rundot-game-sdk": "5.24.0",

@@ -14,6 +14,30 @@ import { createStage, type Stage } from "./stage.ts";
 import { createPageScene, type Scene } from "./scene/pageScene.ts";
 import { store, useStore } from "../state/store.ts";
 
+/**
+ * How long to watch for a renderer that dies after it started.
+ *
+ * A WebGPU device can pass `init()`, pass a probe draw, and then fail on the
+ * first shader the real scene needs. Nothing throws where React can see it: the
+ * ticker keeps running and the player gets a blank canvas under a working UI
+ * for the whole session. Watching the window's error channel for a few seconds
+ * after mount is the only place that failure is observable.
+ */
+const RENDER_WATCHDOG_MS = 4_000;
+
+/** Errors that mean "this backend cannot draw", not "the game has a bug". */
+function looksLikeRendererFailure(message: string): boolean {
+    const text = message.toLowerCase();
+    return (
+        text.includes("renderpipeid") ||
+        text.includes("gpuprogram") ||
+        text.includes("createshadermodule") ||
+        text.includes("gpu") ||
+        text.includes("webgpu") ||
+        text.includes("destructure property 'source'")
+    );
+}
+
 export default function GameCanvas() {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const appRef = useRef<Application | null>(null);
@@ -23,11 +47,40 @@ export default function GameCanvas() {
         let disposed = false;
         let scene: Scene | null = null;
         let stage: Stage | null = null;
+        let watchdog = 0;
+        let removeWatchdog: (() => void) | null = null;
         const host = hostRef.current;
         if (!host) return;
 
-        const initialize = async (): Promise<void> => {
-            const app = await createPixiApp(host);
+        const teardown = (): void => {
+            removeWatchdog?.();
+            removeWatchdog = null;
+            if (watchdog) window.clearTimeout(watchdog);
+            watchdog = 0;
+            try {
+                scene?.destroy();
+            } catch {
+                /* scene already torn down */
+            }
+            scene = null;
+            try {
+                stage?.destroy();
+            } catch {
+                /* stage already torn down */
+            }
+            stage = null;
+            if (appRef.current) {
+                try {
+                    appRef.current.destroy({ removeView: true }, { children: true });
+                } catch {
+                    /* renderer already gone */
+                }
+                appRef.current = null;
+            }
+        };
+
+        const build = async (forceWebGl: boolean): Promise<void> => {
+            const app = await createPixiApp(host, forceWebGl ? "webgl" : undefined);
             if (disposed) {
                 app.destroy({ removeView: true }, { children: true });
                 return;
@@ -39,8 +92,25 @@ export default function GameCanvas() {
             scene = createPageScene(app, stage);
             // Respect a pause that landed while the canvas was initializing.
             if (store.get().paused || document.hidden) app.ticker.stop();
+
+            if (forceWebGl) return;
+
+            // Watch for a backend that fails only once the real scene draws.
+            const onError = (event: ErrorEvent): void => {
+                if (disposed || !looksLikeRendererFailure(event.message ?? "")) return;
+                console.warn("[renderer] WebGPU failed after start; rebuilding on WebGL", event.message);
+                teardown();
+                void build(true).catch(reportFailure);
+            };
+            window.addEventListener("error", onError);
+            removeWatchdog = () => window.removeEventListener("error", onError);
+            watchdog = window.setTimeout(() => {
+                removeWatchdog?.();
+                removeWatchdog = null;
+            }, RENDER_WATCHDOG_MS);
         };
-        void initialize().catch((error) => {
+
+        const reportFailure = (error: unknown): void => {
             if (disposed) return;
             console.error("[renderer] Pixi initialization failed", error);
             store.patch({
@@ -48,23 +118,13 @@ export default function GameCanvas() {
                 menuScreen: "title",
                 toast: "this device cannot open the page — try another",
             });
-        });
+        };
+
+        void build(false).catch(reportFailure);
+
         return () => {
             disposed = true;
-            try {
-                scene?.destroy();
-            } catch {
-                /* scene already torn down */
-            }
-            try {
-                stage?.destroy();
-            } catch {
-                /* stage already torn down */
-            }
-            if (appRef.current) {
-                appRef.current.destroy({ removeView: true }, { children: true });
-                appRef.current = null;
-            }
+            teardown();
         };
     }, []);
 

@@ -3,9 +3,16 @@
 export const GAME_NAME = "Inkbloom";
 export const GAME_TAGLINE = "paint inks that live";
 
-/** Simulation grid. 3:4 so the page is a portrait notebook, not a phone screen. */
+/**
+ * Simulation grid.
+ *
+ * Deliberately taller than a notebook page: a phone is roughly 9:19.5, and a
+ * 3:4 sheet leaves a third of the screen as dead desk. A tall page fills the
+ * device *and* plays better — material has room to fall, climb and react
+ * before it reaches an edge.
+ */
 export const SIM_WIDTH = 150;
-export const SIM_HEIGHT = 200;
+export const SIM_HEIGHT = 258;
 export const PAGE_ASPECT = SIM_WIDTH / SIM_HEIGHT;
 
 /** Fixed simulation rate. Catch-up is capped so a stalled tab cannot spiral. */

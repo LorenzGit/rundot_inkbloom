@@ -2,7 +2,7 @@
  * Pixi v8 Application factory. One place owns renderer options so the rest of
  * the game never touches them.
  */
-import { Application } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 
 type RendererPreference = "webgpu" | "webgl";
 
@@ -17,14 +17,38 @@ async function initializeRenderer(host: HTMLElement, preference: RendererPrefere
             backgroundAlpha: 0,
             antialias: true,
         });
-        return app;
     } catch (error) {
-        try {
-            app.destroy({ removeView: true }, { children: true });
-        } catch {
-            // Initialization may fail before Pixi creates a renderer to destroy.
-        }
+        destroyQuietly(app);
         throw error;
+    }
+
+    // Prove the backend can actually draw before handing it to the game.
+    //
+    // `app.init()` resolving is not evidence that rendering works: on some
+    // mobile WebViews Pixi's WebGPU feature detection passes and the adapter is
+    // created, and then the very first shader compile fails. Nothing throws
+    // where anyone is listening, the ticker keeps running, and the player is
+    // left staring at a blank canvas for the whole session. A one-frame probe
+    // turns that silent failure into a fallback.
+    try {
+        const probe = new Container();
+        const mark = new Graphics().rect(0, 0, 2, 2).fill({ color: 0xffffff, alpha: 0.001 });
+        probe.addChild(mark);
+        app.renderer.render(probe);
+        probe.destroy({ children: true });
+    } catch (error) {
+        destroyQuietly(app);
+        throw new Error(`${preference} renderer failed its first draw: ${String(error)}`);
+    }
+
+    return app;
+}
+
+function destroyQuietly(app: Application): void {
+    try {
+        app.destroy({ removeView: true }, { children: true });
+    } catch {
+        // Initialization may fail before Pixi creates a renderer to destroy.
     }
 }
 
@@ -34,20 +58,22 @@ async function initializeRenderer(host: HTMLElement, preference: RendererPrefere
  * orientation-aware `--game-w` frame that sizes the DOM UI.
  *
  * @param host element the canvas fills (position: relative/absolute)
+ * @param force pin a backend, skipping detection. Used by the caller's
+ *   recovery path when WebGPU has already been shown not to work here.
  */
-export async function createPixiApp(host: HTMLElement): Promise<Application> {
+export async function createPixiApp(host: HTMLElement, force?: RendererPreference): Promise<Application> {
     const rendererQuery = new URLSearchParams(window.location.search).get("renderer");
+    const requested = force ?? (rendererQuery === "webgl" || rendererQuery === "webgpu" ? rendererQuery : null);
     let app: Application;
-    if (rendererQuery === "webgl" || rendererQuery === "webgpu") {
-        // Forced modes are strict so QA can prove each backend independently.
-        app = await initializeRenderer(host, rendererQuery);
+    if (requested) {
+        // Forced modes are strict so QA — and the caller's WebGPU recovery
+        // path — can pin a backend and know exactly what it got.
+        app = await initializeRenderer(host, requested);
     } else {
         try {
-            // Pixi feature detection can pass even when adapter/device creation
-            // later fails in a WebView. That failure is not auto-retried.
             app = await initializeRenderer(host, "webgpu");
         } catch (webGpuError) {
-            console.warn("[renderer] WebGPU initialization failed; retrying with WebGL", webGpuError);
+            console.warn("[renderer] WebGPU unusable; falling back to WebGL", webGpuError);
             app = await initializeRenderer(host, "webgl");
         }
     }

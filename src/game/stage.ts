@@ -55,6 +55,55 @@ export function createStage(app: Application): Stage {
     // app.screen is in CSS pixels regardless of resolution/autoDensity, so
     // the design mapping is unaffected by devicePixelRatio.
     app.renderer.on("resize", layout);
+
+    /**
+     * Watch the host element, not just the window.
+     *
+     * Pixi's `resizeTo` option reads the host's clientWidth/clientHeight at
+     * init and then ONLY re-reads it on a `window` resize — it installs no
+     * ResizeObserver. React mounts this canvas when the phase flips to
+     * 'playing', so the host div frequently has no layout yet when the async
+     * `app.init()` resolves. The renderer is then sized 0x0, `layout()` bails
+     * on the zero guard, and because the window never resizes nothing ever
+     * re-triggers it: a permanently blank canvas with no error anywhere.
+     *
+     * Observing the host closes that race for good, and also handles the host
+     * changing size without the window doing so (orientation-driven CSS,
+     * safe-area changes, the RUN host resizing its frame).
+     */
+    const host = app.canvas.parentElement;
+    let observer: ResizeObserver | null = null;
+    /** True once the host has been observed with no layout at all. */
+    let wasCollapsed = app.screen.width <= 0 || app.screen.height <= 0;
+
+    if (host && typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(() => {
+            const { clientWidth, clientHeight } = host;
+            if (clientWidth <= 0 || clientHeight <= 0) {
+                wasCollapsed = true;
+                return;
+            }
+
+            if (wasCollapsed) {
+                wasCollapsed = false;
+                // Coming back from zero size, the host is usually the SAME size
+                // it was before. Pixi's `resize()` early-returns when the
+                // dimensions match, so it would never reconfigure — and a
+                // WebGPU canvas that was collapsed has had its swap chain torn
+                // down, so it renders nothing forever with no error. Nudge the
+                // height by a pixel to force a genuine reconfigure.
+                app.renderer.resize(clientWidth, Math.max(1, clientHeight - 1));
+            }
+
+            // Re-sizing emits 'resize', which runs layout(); call it anyway in
+            // case the dimensions already matched and only the stage mapping
+            // was missed.
+            app.renderer.resize(clientWidth, clientHeight);
+            layout();
+        });
+        observer.observe(host);
+    }
+
     layout();
 
     return {
@@ -67,6 +116,8 @@ export function createStage(app: Application): Stage {
             return () => resizeCbs.delete(cb);
         },
         destroy() {
+            observer?.disconnect();
+            observer = null;
             app.renderer.off("resize", layout);
             resizeCbs.clear();
             root.destroy({ children: true });
