@@ -49,6 +49,7 @@ import {
     starPath,
 } from "./handDrawn.ts";
 import { readSafeInsets } from "./safeArea.ts";
+import { publishShelfSlots } from "../../qa/browserContract.ts";
 import {
     BRUSH_LARGE,
     BRUSH_SMALL,
@@ -99,7 +100,57 @@ interface ShelfItem {
     index: number;
     x: number;
     y: number;
+    /** Size of the thing drawn inside the slot. */
     size: number;
+    /**
+     * The recess the item sits in. Owned by the layout, never re-derived at
+     * draw time — deriving it from `size` there is what let the slots grow
+     * wider than the pitch they were laid out on and overlap their neighbours.
+     */
+    slotW: number;
+    slotH: number;
+}
+
+/** Bare plank left between two slots. */
+const SLOT_GAP = 6;
+
+/**
+ * Shelf geometry, derived once from the available width.
+ *
+ * Everything cascades from the slot pitch downward — pitch, then slot, then
+ * the bottle inside it — so a slot can never be wider than the space allotted
+ * to it. Deriving the slot *from* the bottle is what let them overlap: the
+ * bottle was clamped to a maximum, the slot was 1.28x the bottle, and on a
+ * wide-ish phone that product exceeded the pitch.
+ */
+interface ShelfMetrics {
+    slotPitch: number;
+    slotW: number;
+    slotH: number;
+    bottleSize: number;
+    toolSize: number;
+    toolSlotW: number;
+    toolSlotH: number;
+    /** Total plank height this content needs, excluding the bottom safe area. */
+    contentHeight: number;
+}
+
+function shelfMetrics(available: number): ShelfMetrics {
+    const slotPitch = (available - SLOT_GAP * 2) / INKS.length;
+    const slotW = slotPitch - SLOT_GAP;
+    const bottleSize = Math.max(28, Math.min(58, slotW * 0.76));
+    const slotH = bottleSize * 1.62;
+    const toolSize = Math.max(28, Math.min(46, bottleSize * 0.88));
+    return {
+        slotPitch,
+        slotW,
+        slotH,
+        bottleSize,
+        toolSize,
+        toolSlotW: toolSize * 1.5,
+        toolSlotH: toolSize * 1.34,
+        contentHeight: 42 + bottleSize * 1.15 + 28 + toolSize * 1.34 + 26,
+    };
 }
 
 interface Particle {
@@ -345,12 +396,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         // The shelf is sized by its contents, not by a share of the screen, so
         // the bottles are the same comfortable size on every phone and the
         // sheet gets everything that is left.
-        // The row is inset by more than half a slot so the outermost slot
-        // backgrounds are not clipped by the screen edge.
-        const slotPitch = (width - safeLeft - safeRight - 28) / INKS.length;
-        const bottleSize = Math.max(34, Math.min(62, slotPitch - 4));
-        const toolSize = Math.max(30, Math.min(46, bottleSize * 0.8));
-        shelf.height = 44 + bottleSize * 1.15 + 26 + toolSize * 1.3 + 22 + safeBottom;
+        const metrics = shelfMetrics(width - safeLeft - safeRight);
+        shelf.height = metrics.contentHeight + safeBottom;
         shelf.top = height - shelf.height;
 
         const usableWidth = width - safeLeft - safeRight - PAGE_MARGIN * 2;
@@ -380,7 +427,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         hintLine.position.set(page.x + page.w / 2, page.y + page.h - 18);
         hintLine.style.fontSize = Math.max(13, page.w * 0.032);
 
-        layoutShelf(width, safeLeft, safeRight, bottleSize, toolSize, slotPitch);
+        layoutShelf(width, safeLeft, safeRight, metrics);
         layoutLockMarks();
         layoutToolCaptions();
         drawRule();
@@ -427,39 +474,51 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         rebuildPaper();
     }
 
-    function layoutShelf(
-        width: number,
-        safeLeft: number,
-        safeRight: number,
-        bottleSize: number,
-        toolSize: number,
-        slotPitch: number,
-    ): void {
+    /** Place the shelf's controls using geometry already derived by `shelfMetrics`. */
+    function layoutShelf(width: number, safeLeft: number, safeRight: number, metrics: ShelfMetrics): void {
         shelfItems = [];
+        const { slotPitch, slotW, slotH, bottleSize, toolSize, toolSlotW, toolSlotH } = metrics;
+
         // Offsets are measured down from the tray lip, so a tall phone gets a
         // deeper plank rather than the same controls spread thinly across it.
         // A bottle's cork reaches about 0.7 of its size above centre, so the
         // first row has to clear the label by that much or they collide.
         const labelY = shelf.top + 19;
-        const rowOneY = shelf.top + 44 + bottleSize * 0.7;
-        const rowTwoY = rowOneY + bottleSize * 0.45 + 26 + toolSize * 0.6;
+        const rowOneY = shelf.top + 42 + bottleSize * 0.7;
+        const rowTwoY = rowOneY + bottleSize * 0.45 + 28 + toolSize * 0.6;
 
-        const startX = safeLeft + 14 + slotPitch / 2;
+        const startX = safeLeft + SLOT_GAP + slotPitch / 2;
         for (let slot = 0; slot < INKS.length; slot++) {
-            shelfItems.push({ kind: "ink", index: slot, x: startX + slot * slotPitch, y: rowOneY, size: bottleSize });
+            shelfItems.push({
+                kind: "ink",
+                index: slot,
+                x: startX + slot * slotPitch,
+                y: rowOneY,
+                size: bottleSize,
+                slotW,
+                slotH,
+            });
         }
 
         const tools: ShelfKind[] = mirror ? ["brush", "mirror", "tear"] : ["brush", "tear"];
-        const toolPitch = toolSize * 3;
+        const toolPitch = toolSlotW + SLOT_GAP * 3;
         const centre = safeLeft + (width - safeLeft - safeRight) / 2;
         tools.forEach((kind, position) => {
             const offset = (position - (tools.length - 1) / 2) * toolPitch;
-            shelfItems.push({ kind, index: -1, x: centre + offset, y: rowTwoY, size: toolSize });
+            shelfItems.push({
+                kind,
+                index: -1,
+                x: centre + offset,
+                y: rowTwoY,
+                size: toolSize,
+                slotW: toolSlotW,
+                slotH: toolSlotH,
+            });
         });
 
         shelfLabel.anchor.set(0.5, 0.5);
         shelfLabel.position.set(centre, labelY);
-        shelfLabel.style.fontSize = Math.max(15, bottleSize * 0.34);
+        shelfLabel.style.fontSize = Math.max(15, bottleSize * 0.36);
     }
 
     // -------------------------------------------------------------- shelf draw
@@ -496,8 +555,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
             // Every control sits in a rounded slot, which is what makes the row
             // read as a set of buttons rather than a line of loose objects.
-            const slotW = item.size * 1.28;
-            const slotH = item.size * (item.kind === "ink" ? 1.62 : 1.34);
+            const { slotW, slotH } = item;
             const slotX = item.x - slotW / 2;
             const slotY = item.y - slotH * (item.kind === "ink" ? 0.62 : 0.5);
             // Slots are cut *into* the plank, so an unselected bottle sits in a
@@ -1205,6 +1263,19 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         }
     }
 
+    // Publish shelf geometry so automated QA can prove no two controls overlap.
+    publishShelfSlots(() => {
+        const scale = stage.scale() || 1;
+        return shelfItems.map((item) => ({
+            kind: item.kind,
+            index: item.index,
+            x: item.x * scale,
+            y: item.y * scale,
+            width: item.slotW * scale,
+            height: item.slotH * scale,
+        }));
+    });
+
     const unsubscribeResize = stage.onResize(layout);
     layout();
     rebuildPaper();
@@ -1215,6 +1286,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     return {
         destroy() {
             destroyed = true;
+            publishShelfSlots(null);
             app.ticker.remove(tick);
             unsubscribeResize();
             app.canvas.removeEventListener("pointerdown", handlePointerDown);
