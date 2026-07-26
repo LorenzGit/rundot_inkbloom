@@ -29,6 +29,7 @@ import {
     drawEraser,
     drawLockDisc,
     drawNib,
+    LOCK_BADGE_OFFSET,
     drawTornSheetIcon,
     starPath,
 } from "./handDrawn.ts";
@@ -165,8 +166,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
      * buffer directly — cheaper than either GPU path, and it cannot break the
      * frame.
      */
-    bleedSprite.alpha = 0.5;
-    inkSprite.alpha = 0.94;
+    bleedSprite.alpha = 0.34;
+    inkSprite.alpha = 0.96;
     bleedSprite.blendMode = "multiply";
     inkSprite.blendMode = "multiply";
 
@@ -222,7 +223,17 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     let pourY = 0;
     let hasHoverPointer = false;
     let hintAlpha = 1;
-    const wiggles = new Float32Array(INKS.length);
+    /**
+     * Selection feedback, split by meaning.
+     *
+     * `pops` is a scale overshoot on a successful pick — it reads as "yes,
+     * that one". `refusals` is the left-right shake, kept ONLY for tapping a
+     * locked bottle, because a shake is universally the gesture for "no". They
+     * used to be the same animation, which made every selection feel like an
+     * error.
+     */
+    const pops = new Float32Array(INKS.length);
+    const refusals = new Float32Array(INKS.length);
     let selectionPulse = 0;
     let tearProgress = 0;
     /** 1 the instant a secret is found, easing back to 0. */
@@ -266,7 +277,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         bleedSprite.blendMode = style.inkBlend;
         inkSprite.blendMode = style.inkBlend;
         // Screening ink onto a dark sheet needs less halo or it fogs the page.
-        bleedSprite.alpha = style.inkBlend === "screen" ? 0.32 : 0.5;
+        bleedSprite.alpha = style.inkBlend === "screen" ? 0.22 : 0.34;
         drawRule();
         drawDesk();
     }
@@ -316,7 +327,9 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         // The shelf is sized by its contents, not by a share of the screen, so
         // the bottles are the same comfortable size on every phone and the
         // sheet gets everything that is left.
-        const slotPitch = (width - safeLeft - safeRight - 12) / INKS.length;
+        // The row is inset by more than half a slot so the outermost slot
+        // backgrounds are not clipped by the screen edge.
+        const slotPitch = (width - safeLeft - safeRight - 28) / INKS.length;
         const bottleSize = Math.max(34, Math.min(62, slotPitch - 4));
         const toolSize = Math.max(30, Math.min(46, bottleSize * 0.8));
         shelf.height = 44 + bottleSize * 1.15 + 26 + toolSize * 1.3 + 22 + safeBottom;
@@ -411,7 +424,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const rowOneY = shelf.top + 44 + bottleSize * 0.7;
         const rowTwoY = rowOneY + bottleSize * 0.45 + 26 + toolSize * 0.6;
 
-        const startX = safeLeft + 6 + slotPitch / 2;
+        const startX = safeLeft + 14 + slotPitch / 2;
         for (let slot = 0; slot < INKS.length; slot++) {
             shelfItems.push({ kind: "ink", index: slot, x: startX + slot * slotPitch, y: rowOneY, size: bottleSize });
         }
@@ -454,7 +467,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
         const discoveries = store.get().discoveryCount;
         for (const item of shelfItems) {
-            const wiggle = item.kind === "ink" ? (wiggles[item.index] ?? 0) : 0;
+            const pop = item.kind === "ink" ? (pops[item.index] ?? 0) : 0;
+            const refusal = item.kind === "ink" ? (refusals[item.index] ?? 0) : 0;
             const isSelected = item.kind === "ink" && item.index === selected;
             const ink = item.kind === "ink" ? INKS[item.index] : undefined;
             const locked = item.kind === "ink" && !isInkUnlocked(item.index, discoveries);
@@ -487,8 +501,13 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             }
 
             shelfGraphics.save();
-            shelfGraphics.translateTransform(item.x, item.y + (isSelected ? -item.size * 0.1 : 0));
-            if (wiggle > 0) shelfGraphics.rotateTransform(Math.sin(wiggle * 24) * 0.13 * wiggle);
+            // A pop is an ease-out overshoot: big immediately, settling back.
+            const popScale = pop > 0 ? 1 + Math.sin(pop * Math.PI) * 0.16 : 1;
+            shelfGraphics.translateTransform(
+                item.x + (refusal > 0 ? Math.sin(refusal * 34) * item.size * 0.13 * refusal : 0),
+                item.y + (isSelected ? -item.size * 0.1 : 0),
+            );
+            if (popScale !== 1) shelfGraphics.scaleTransform(popScale, popScale);
 
             if (item.kind === "ink" && ink) {
                 if (item.index === ERASER_INDEX) drawEraser(shelfGraphics, item.size, true);
@@ -593,8 +612,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (item.kind !== "ink") continue;
             const mark = lockMarks[item.index];
             if (!mark) continue;
-            mark.style.fontSize = Math.max(11, item.size * 0.34);
-            mark.position.set(item.x, item.y + item.size * 0.02);
+            mark.style.fontSize = Math.max(11, item.size * 0.3);
+            mark.position.set(item.x + item.size * LOCK_BADGE_OFFSET.x, item.y + item.size * LOCK_BADGE_OFFSET.y);
         }
         refreshLockMarks(store.get().discoveryCount);
     }
@@ -687,12 +706,16 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     function selectInk(slot: number): void {
         const ink = INKS[slot];
         if (!ink) return;
-        wiggles[slot] = 1;
         if (!isInkUnlocked(slot, store.get().discoveryCount)) {
+            refusals[slot] = 1;
             inkAudio.play("deny");
+            void runtimeServices.haptic("warning");
             store.patch({ toast: `${ink.unlockAt} discoveries to open this one` });
             return;
         }
+        // Pop even when re-picking the same bottle: the tap should always be
+        // acknowledged, or it feels broken.
+        pops[slot] = 1;
         if (selected === slot) return;
         selected = slot;
         selectionPulse = 1;
@@ -1129,9 +1152,11 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (tearProgress === 0) tornSprite.visible = false;
         }
 
-        for (let index = 0; index < wiggles.length; index++) {
-            const value = wiggles[index] ?? 0;
-            if (value > 0) wiggles[index] = Math.max(0, value - dt * 2.4);
+        for (let index = 0; index < pops.length; index++) {
+            const pop = pops[index] ?? 0;
+            if (pop > 0) pops[index] = Math.max(0, pop - dt * 4.5);
+            const refusal = refusals[index] ?? 0;
+            if (refusal > 0) refusals[index] = Math.max(0, refusal - dt * 3.2);
         }
         if (selectionPulse > 0) selectionPulse = Math.max(0, selectionPulse - dt * 3);
 

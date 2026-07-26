@@ -85,102 +85,132 @@ export interface BottleStyle {
  * roughly 40 design units wide, and anything more delicate turns to mush.
  */
 export function drawBottle(g: Graphics, style: BottleStyle): void {
-    const { size: s, colour, locked, onDesk } = style;
-    const outline = onDesk ? CREAM : INK;
-    const bodyW = s * 0.68;
-    const bodyH = s * 0.66;
-    const shoulder = -bodyH * 0.5;
+    const { size: s, colour, locked } = style;
+
+    // Proportions are tuned for the size these are actually seen at — roughly
+    // 40 design units across on a phone. At that scale a bottle has to be a
+    // *colour chip shaped like a bottle*, not a rendering of glassware: the
+    // silhouette is filled with the ink itself so the eye reads "the blue one"
+    // before it reads anything else.
+    const bodyW = s * 0.62;
+    const bodyH = s * 0.58;
+    const top = -bodyH * 0.5;
     const base = bodyH * 0.5;
-    const neckW = s * 0.3;
-    const neckTop = shoulder - s * 0.2;
-    const corkH = s * 0.16;
+    const neckW = s * 0.26;
+    const neckH = s * 0.16;
+    const shoulder = s * 0.1;
+    const corkW = s * 0.32;
+    const corkH = s * 0.15;
+    const corkTop = top - neckH - corkH;
+    const radius = s * 0.13;
 
-    // The bottle sitting in its well: a soft contact shadow, so the row reads
-    // as objects on a shelf rather than stickers on a bar.
-    g.ellipse(0, base + s * 0.06, bodyW * 0.62, s * 0.09);
-    g.fill({ color: 0x000000, alpha: 0.35 });
+    // Contact shadow, so the row reads as objects standing in a tray.
+    g.ellipse(0, base + s * 0.07, bodyW * 0.6, s * 0.075);
+    g.fill({ color: 0x000000, alpha: 0.4 });
 
+    /** The full silhouette: shoulders curving out of a short neck. */
     const body = (): void => {
-        g.moveTo(-neckW / 2, neckTop);
-        g.lineTo(neckW / 2, neckTop);
-        g.lineTo(neckW / 2, shoulder - s * 0.02);
-        g.quadraticCurveTo(bodyW / 2, shoulder + s * 0.04, bodyW / 2, shoulder + bodyH * 0.34);
-        g.lineTo(bodyW / 2, base - s * 0.07);
-        g.quadraticCurveTo(bodyW / 2, base, bodyW / 2 - s * 0.08, base);
-        g.lineTo(-bodyW / 2 + s * 0.08, base);
-        g.quadraticCurveTo(-bodyW / 2, base, -bodyW / 2, base - s * 0.07);
-        g.lineTo(-bodyW / 2, shoulder + bodyH * 0.34);
-        g.quadraticCurveTo(-bodyW / 2, shoulder + s * 0.04, -neckW / 2, shoulder - s * 0.02);
+        g.moveTo(-neckW / 2, top - neckH);
+        g.lineTo(neckW / 2, top - neckH);
+        g.lineTo(neckW / 2, top - neckH * 0.2);
+        g.quadraticCurveTo(bodyW / 2, top, bodyW / 2, top + shoulder);
+        g.lineTo(bodyW / 2, base - radius);
+        g.quadraticCurveTo(bodyW / 2, base, bodyW / 2 - radius, base);
+        g.lineTo(-bodyW / 2 + radius, base);
+        g.quadraticCurveTo(-bodyW / 2, base, -bodyW / 2, base - radius);
+        g.lineTo(-bodyW / 2, top + shoulder);
+        g.quadraticCurveTo(-bodyW / 2, top, -neckW / 2, top - neckH * 0.2);
         g.closePath();
     };
 
-    // Glass. Frosted enough that even basalt — the darkest ink — reads inside it.
+    // Base colour, then a darker wash over the lower half. Two layered fills
+    // stand in for the vertical gradient Pixi Graphics cannot express, and are
+    // what stop the bottle reading as a flat sticker.
     body();
-    g.fill({ color: onDesk ? 0xe9e2cf : 0xffffff, alpha: locked ? 0.16 : 0.5 });
-
-    // The ink itself, filled high enough that colour is what the eye catches
-    // first — a shelf of mostly-empty glass reads grey at a glance.
-    const inkTop = shoulder + bodyH * 0.2;
-    g.moveTo(-bodyW / 2 + 1, inkTop);
-    g.quadraticCurveTo(0, inkTop + s * 0.05, bodyW / 2 - 1, inkTop);
-    g.lineTo(bodyW / 2 - 1, base - s * 0.06);
-    g.quadraticCurveTo(bodyW / 2 - 1, base - 1, bodyW / 2 - s * 0.1, base - 1);
-    g.lineTo(-bodyW / 2 + s * 0.1, base - 1);
-    g.quadraticCurveTo(-bodyW / 2 + 1, base - 1, -bodyW / 2 + 1, base - s * 0.06);
-    g.closePath();
-    g.fill({ color: colour, alpha: locked ? 0.22 : 0.95 });
-
+    g.fill({ color: colour, alpha: locked ? 0.26 : 1 });
     if (!locked) {
-        // A single specular stripe. One highlight reads as glass; two read as
-        // decoration.
-        g.moveTo(-bodyW * 0.3, shoulder + bodyH * 0.16);
-        g.lineTo(-bodyW * 0.3, base - s * 0.12);
-        g.stroke({ width: Math.max(1.4, s * 0.06), color: 0xffffff, alpha: 0.42, cap: "round" });
+        g.roundRect(-bodyW / 2, base - bodyH * 0.55, bodyW, bodyH * 0.55, radius);
+        g.fill({ color: 0x000000, alpha: 0.18 });
+        // The meniscus: a pale line where the ink stops and air begins.
+        g.roundRect(-bodyW / 2, top + shoulder * 0.4, bodyW, s * 0.11, radius * 0.5);
+        g.fill({ color: 0xffffff, alpha: 0.3 });
     }
 
+    if (!locked) {
+        // One soft specular down the left shoulder. One highlight reads as
+        // glass; two read as decoration.
+        g.roundRect(-bodyW * 0.34, top + shoulder * 0.9, s * 0.07, bodyH * 0.62, s * 0.035);
+        g.fill({ color: 0xffffff, alpha: 0.34 });
+    }
+
+    // A light rim, matching every other raised surface in the game. A dark
+    // outline here made the row look like clip art.
     body();
     g.stroke({
-        width: Math.max(1.5, s * 0.055),
-        color: outline,
-        alpha: locked ? 0.4 : 0.92,
-        cap: "round",
+        width: Math.max(1.6, s * 0.05),
+        color: 0xffffff,
+        alpha: locked ? 0.16 : 0.55,
         join: "round",
     });
 
-    // Cork.
-    g.roundRect(-neckW / 2 - s * 0.05, neckTop - corkH, neckW + s * 0.1, corkH + s * 0.03, s * 0.04);
-    g.fill({ color: 0x9a7a4e, alpha: locked ? 0.3 : 1 });
-    g.roundRect(-neckW / 2 - s * 0.05, neckTop - corkH, neckW + s * 0.1, corkH + s * 0.03, s * 0.04);
-    g.stroke({ width: Math.max(1.2, s * 0.04), color: outline, alpha: locked ? 0.35 : 0.75 });
+    // Cork: a rounded plug with a lit top face.
+    g.roundRect(-corkW / 2, corkTop, corkW, corkH + neckH * 0.5, s * 0.05);
+    g.fill({ color: locked ? 0x4a4260 : 0xb08753 });
+    if (!locked) {
+        g.roundRect(-corkW / 2, corkTop, corkW, corkH * 0.42, s * 0.05);
+        g.fill({ color: 0xd8b077, alpha: 0.9 });
+    }
 }
 
 /**
- * The gilt disc a locked bottle wears, behind its requirement number.
+ * The gold badge a locked bottle wears, behind its requirement number.
+ *
+ * Sits low and to the right rather than over the middle, so the bottle's
+ * silhouette and colour still read through — the player should see *which*
+ * ink is coming, not just that something is.
+ *
  * Drawn separately from the bottle so the number can live in a Text object.
  */
+export const LOCK_BADGE_OFFSET = { x: 0.3, y: 0.28 } as const;
+
 export function drawLockDisc(g: Graphics, size: number): void {
-    g.circle(0, size * 0.02, size * 0.24);
-    g.fill({ color: 0x1a150f, alpha: 0.82 });
-    g.circle(0, size * 0.02, size * 0.24);
-    g.stroke({ width: Math.max(1.2, size * 0.04), color: GOLD, alpha: 0.8 });
+    const x = size * LOCK_BADGE_OFFSET.x;
+    const y = size * LOCK_BADGE_OFFSET.y;
+    const radius = size * 0.21;
+    g.circle(x, y + size * 0.02, radius);
+    g.fill({ color: 0x000000, alpha: 0.45 });
+    g.circle(x, y, radius);
+    g.fill({ color: 0x1a1528 });
+    g.circle(x, y, radius);
+    g.stroke({ width: Math.max(1.4, size * 0.045), color: GOLD, alpha: 0.95 });
 }
 
-/** The kneaded gum eraser — deliberately the one shelf item that is not glass. */
-export function drawEraser(g: Graphics, s: number, onDesk: boolean): void {
-    g.moveTo(-s * 0.32, s * 0.18);
-    g.quadraticCurveTo(-s * 0.38, -s * 0.18, -s * 0.05, -s * 0.26);
-    g.quadraticCurveTo(s * 0.3, -s * 0.34, s * 0.34, s * 0.02);
-    g.quadraticCurveTo(s * 0.36, s * 0.3, 0, s * 0.3);
-    g.quadraticCurveTo(-s * 0.28, s * 0.32, -s * 0.32, s * 0.18);
-    g.closePath();
-    g.fill({ color: 0xc9bfa8, alpha: 0.94 });
-    g.stroke({
-        width: Math.max(1.4, s * 0.045),
-        color: onDesk ? CREAM : INK,
-        alpha: 0.85,
-        cap: "round",
-        join: "round",
-    });
+/**
+ * The eraser.
+ *
+ * Built from the same parts as a bottle — contact shadow, body, lit top face,
+ * light rim — so it sits in the row as a sibling rather than as a grey lump.
+ * It is the one shelf item that is not glass, and the flat block shape is what
+ * says so.
+ */
+export function drawEraser(g: Graphics, s: number, _onDesk: boolean): void {
+    const w = s * 0.6;
+    const h = s * 0.46;
+
+    g.ellipse(0, h / 2 + s * 0.09, w * 0.6, s * 0.075);
+    g.fill({ color: 0x000000, alpha: 0.4 });
+
+    g.roundRect(-w / 2, -h / 2, w, h, s * 0.1);
+    g.fill({ color: 0xdcd3f0 });
+    // The worn, ink-stained end.
+    g.roundRect(-w / 2, h * 0.06, w, h * 0.44, s * 0.1);
+    g.fill({ color: 0x8f86b8, alpha: 0.55 });
+    // Lit top face.
+    g.roundRect(-w / 2, -h / 2, w, h * 0.3, s * 0.1);
+    g.fill({ color: 0xffffff, alpha: 0.5 });
+
+    g.roundRect(-w / 2, -h / 2, w, h, s * 0.1);
+    g.stroke({ width: Math.max(1.6, s * 0.05), color: 0xffffff, alpha: 0.5, join: "round" });
 }
 
 /** A torn-off sheet, used as the icon for clearing the page. */

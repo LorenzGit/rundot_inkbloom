@@ -51,14 +51,16 @@ import {
 } from "../sim/elements.ts";
 
 /**
- * Blur radii, in cells.
+ * Bleed blur radius, in cells.
  *
- * The mark gets a single-cell blur: combined with the roughly 4.5x bilinear
- * magnification to the page, that is what turns a grid of cells into something
- * with a wet edge. The bleed gets a wide one for the halo that spreads into the
- * fibre around every mark.
+ * The mark itself is NOT blurred. A cell is only a few device pixels wide, so
+ * even a one-cell blur smears a pile of sand into a brown cloud and throws away
+ * the per-cell granulation that makes it read as grains at all. Bilinear
+ * magnification already softens the cell edges; that is the right amount.
+ *
+ * The bleed is a separate, deliberately wide pass — the wet halo that spreads
+ * into the fibre around a mark — drawn faintly underneath.
  */
-const MARK_RADIUS = 1;
 const BLEED_RADIUS = 3;
 
 export interface SimTexture {
@@ -73,9 +75,8 @@ export interface SimTexture {
 
 export function createSimTexture(width: number, height: number): SimTexture {
     const cells = width * height;
-    const rawPixels = new Uint8Array(cells * 4);
-    const rawWords = new Uint32Array(rawPixels.buffer);
     const markPixels = new Uint8Array(cells * 4);
+    const markWords = new Uint32Array(markPixels.buffer);
     const bleedPixels = new Uint8Array(cells * 4);
     const scratch = new Uint8Array(cells * 4);
 
@@ -104,11 +105,10 @@ export function createSimTexture(width: number, height: number): SimTexture {
         mark,
         bleed,
         update(sim, withBleed) {
-            paint(sim, rawWords, width, height);
-            blur(rawPixels, markPixels, scratch, width, height, MARK_RADIUS);
+            paint(sim, markWords, width, height);
             markSource.update();
             if (!withBleed) return;
-            blur(rawPixels, bleedPixels, scratch, width, height, BLEED_RADIUS);
+            blur(markPixels, bleedPixels, scratch, width, height, BLEED_RADIUS);
             bleedSource.update();
         },
         destroy() {
@@ -389,7 +389,11 @@ function paint(sim: InkSim, words: Uint32Array, width: number, height: number): 
             }
 
             // Granulation: pigment never dries perfectly flat.
-            const grainScale = 238 + (g & 31);
+            //
+            // Widened deliberately. A narrow range averages out at a distance
+            // and a pile of sand reads as one flat colour; this is what makes
+            // individual grains visible now that the mark is no longer blurred.
+            const grainScale = 224 + ((g & 31) << 1);
             r = (r * grainScale) >> 8;
             gg = (gg * grainScale) >> 8;
             b = (b * grainScale) >> 8;

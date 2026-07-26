@@ -80,8 +80,11 @@ game itself.
   foxing, lamp falloff, an optional drafting grid. Deterministic per sheet seed,
   so grain never crawls between frames and a torn-off page gets a new sheet.
 - **Ink** (`scene/simTexture.ts`) — granulation from each cell's fixed paper
-  grain, watercolour edge darkening on any cell touching bare paper, and two
-  blur radii for the mark and its wet halo.
+  grain and watercolour edge darkening on any cell touching bare paper. The
+  mark is deliberately **not** blurred: a cell is only a few device pixels
+  wide, so even a one-cell blur turns a pile of sand into a brown cloud and
+  destroys the grain. Bilinear magnification supplies exactly enough softness.
+  Only the wet halo underneath gets a wide blur.
 - **Shelf** (`scene/handDrawn.ts`) — corked apothecary bottles with glass, ink
   level, specular stripe and contact shadow; the eraser, brush and torn-sheet
   icons; the gold lock disc.
@@ -106,6 +109,9 @@ Shared timings in `scene/palette.ts`.
 
 - The CTA has a hard bottom edge and depresses into it — a physical key press.
 - The progress chip punches when the count changes.
+- Picking a bottle *pops* it — a scale overshoot that settles. The left-right
+  shake is reserved for tapping a locked bottle, because a shake universally
+  reads as "no"; using it for selection made every pick feel like an error.
 - A discovery fires three things at once: a particle burst at the cell, a rim
   of the discovery's own colour racing around the sheet, and a reward card
   sliding down from the top. The rim matters most: the player is usually
