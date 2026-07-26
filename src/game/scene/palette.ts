@@ -1,51 +1,62 @@
 /**
- * Art direction: **Illuminated Marginalia**.
+ * Art direction: **Inkbloom**.
  *
- * A naturalist's field journal open on a dark desk under a single warm lamp.
- * Printed structure (serif headings, ruled borders, a numbered index) annotated
- * by a hand that is clearly still working: wobbling rules, gilt stars inked in
- * as each secret is confirmed, ink that granulates and darkens at its edges the
- * way real pigment does when it dries on rag paper.
+ * The page is a warm sheet of rag paper — that part is the game and never
+ * changes, because the whole look depends on pigment multiplying into fibre.
+ * Everything *around* it is a modern mobile-game chrome: a deep indigo shell,
+ * rounded surfaces with a light rim and a real drop shadow, and one saturated
+ * gold accent reserved for progress and reward.
  *
  * Two rules keep it coherent:
- *   1. Everything on the page is *pigment on paper* — the ink layer multiplies
- *      into the sheet rather than sitting on top of it, so the paper's fibre
- *      and vignette read through every mark.
- *   2. Everything off the page is *desk* — cream on walnut, gilt only for
- *      things the player earned.
+ *   1. **On the page it is pigment.** Ink multiplies into the sheet so the
+ *      paper's grain and vignette read through every mark.
+ *   2. **Off the page it is UI.** Deep indigo, rounded, lit from above, with
+ *      gold used only for things the player earned. The indigo is what makes
+ *      the paper glow — a brown desk made it muddy.
  */
 
-/** Walnut desk under lamplight; the full-bleed backdrop behind the page. */
-export const DESK = 0x1b1712;
-export const DESK_LAMP = 0x3a2f22;
+/** The shell behind everything. Deep indigo, lit from the top. */
+export const SHELL = 0x141222;
+export const SHELL_DEEP = 0x0b0a13;
+export const SHELL_LIFT = 0x241f3a;
+
+/** Raised surfaces: the shelf plank, cards, buttons. */
+export const SURFACE = 0x241f38;
+export const SURFACE_HIGH = 0x322b4d;
+/** The one-pixel light rim that sells a surface as raised. */
+export const RIM = 0xffffff;
 
 /** Warm rag paper. */
 export const PAPER = 0xfcf9f0;
 export const PAPER_SHADE = 0xcbbc98;
 
-/** The pen. Used for every ruled line, label, and glyph on the sheet. */
+/** The pen. Every ruled line, label, and glyph drawn on the sheet. */
 export const INK = 0x2a2622;
 
-/** Ink on the desk side, where the paper's contrast is inverted. */
+/** Type on the dark shell. */
 export const CREAM = 0xf4eedd;
+export const MUTED = 0x9d95c2;
 
-/** Gilt. Reserved for discoveries, unlocks, and nothing else. */
-export const GILT = 0xc9a227;
-export const GILT_BRIGHT = 0xf0d488;
+/** Gold. Progress, discoveries, unlocks — and nothing else. */
+export const GOLD = 0xf5b841;
+export const GOLD_DEEP = 0xd8862a;
+export const GOLD_GLOW = 0xffd98a;
 
-/** A found secret's confirmation green, and a locked entry's grey. */
-export const CONFIRMED = 0x3f7d45;
-export const DORMANT = 0x8a8274;
+/** Confirmation and a dormant, not-yet-earned state. */
+export const CONFIRMED = 0x4cc38a;
+export const DORMANT = 0x5d5680;
 
 /**
  * Type roles.
  *
- * The journal's printed voice is a serif, which resolves to a real book face on
- * every platform the game ships to (Iowan/Palatino on iOS and macOS, Noto Serif
- * behind `serif` on Android, Georgia on Windows). The handwritten voice is used
- * only for short marginalia, where a sans fallback still reads as an
- * annotation rather than a broken asset.
+ * The UI voice is a system sans at heavy weights — that is what reads as a
+ * game on a phone, and it is available everywhere without shipping a font.
+ * The serif is kept for the wordmark and the journal's entry titles, where the
+ * game's identity lives; the handwritten face is used only for short marginal
+ * notes, where a sans fallback still reads as an annotation.
  */
+export const UI =
+    '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 export const SERIF = 'Iowan Old Style, "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
 export const HAND = '"Bradley Hand", "Chalkboard SE", "Segoe Print", "Comic Sans MS", cursive';
 

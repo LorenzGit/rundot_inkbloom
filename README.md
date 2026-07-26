@@ -59,14 +59,14 @@ documented at their call sites:
    asserts the two produce identical streams, so there is still exactly one
    deterministic random source and no `Math.random()` anywhere in game logic.
 
-## Art direction — Illuminated Marginalia
+## Art direction
 
-A naturalist's field journal open on a dark desk under one warm lamp. Printed
-serif structure, annotated by a hand that is clearly still working. Everything
-is procedural: the paper's fibre, foxing and vignette, the wobbling ruled
-borders, the ink bottles, the audio, and `public/thumbnail.jpg` — which is
-rendered by the simulation itself, so the store tile cannot drift away from what
-the game actually looks like.
+A warm sheet of paper inside a modern game: real fibre and pigment on the page,
+a deep indigo shell with rounded, top-lit surfaces around it, and one saturated
+gold accent for progress and reward. Everything is procedural — the paper's
+fibre and foxing, the ink's granulation and wet edge, the bottles, the audio,
+and `public/thumbnail.jpg`, which is rendered by the simulation itself and also
+serves as the title screen's hero art.
 
 Full notes: [`docs/art-direction.md`](docs/art-direction.md).
 
@@ -88,6 +88,7 @@ npm run build          # embedded-libraries production build
 npm run build:bundled  # standalone production build
 npm run check          # format, lint, test, public audit, both builds
 npm run thumbnail      # re-render public/thumbnail.jpg from the simulation
+npm run visual-qa      # headless screenshots of every screen, driven by the real buttons
 ```
 
 `?screen=page|notes|shop|settings|stats` deep-links a screen in development.

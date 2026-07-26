@@ -9,7 +9,7 @@
  */
 import { Graphics } from "pixi.js";
 import { NoiseRandom } from "../noiseRandom.ts";
-import { CREAM, GILT, INK } from "./palette.ts";
+import { CREAM, GOLD, INK } from "./palette.ts";
 
 /**
  * A rectangle ruled by hand: four sides, each broken into short segments that
@@ -162,7 +162,7 @@ export function drawLockDisc(g: Graphics, size: number): void {
     g.circle(0, size * 0.02, size * 0.24);
     g.fill({ color: 0x1a150f, alpha: 0.82 });
     g.circle(0, size * 0.02, size * 0.24);
-    g.stroke({ width: Math.max(1.2, size * 0.04), color: GILT, alpha: 0.8 });
+    g.stroke({ width: Math.max(1.2, size * 0.04), color: GOLD, alpha: 0.8 });
 }
 
 /** The kneaded gum eraser — deliberately the one shelf item that is not glass. */

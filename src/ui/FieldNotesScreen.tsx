@@ -71,7 +71,7 @@ export default function FieldNotesScreen({ onClose }: { onClose: () => void }) {
                     <h3>{t("PromptTitle")}</h3>
                     <p className="prompt-brief">{prompt.prompt.brief}</p>
                     {prompt.solved ? null : (
-                        <div className="prompt-progress">
+                        <div className="meter">
                             <span style={{ width: `${Math.round((prompt.progress / prompt.target) * 100)}%` }} />
                         </div>
                     )}
@@ -95,19 +95,26 @@ export default function FieldNotesScreen({ onClose }: { onClose: () => void }) {
             ) : null}
 
             <ul className="notes-list">
-                {DISCOVERIES.map((entry) => {
+                {DISCOVERIES.map((entry, index) => {
                     const isFound = found.includes(entry.id);
                     const isHinted = revealed.includes(entry.id);
                     const canNudge = !isFound && !isHinted && (nudges.freeReady || nudges.adReady);
                     return (
                         <li key={entry.id}>
                             <div className="note-entry" data-found={isFound} data-hinted={isHinted}>
+                                {/* Found entries wear their own colour and a star; the rest
+                                    carry their number, so the list reads as a checklist of
+                                    twenty rather than a column of blanks. */}
                                 <span
                                     className="mark"
                                     aria-hidden="true"
-                                    style={{ color: `#${entry.colour.toString(16).padStart(6, "0")}` }}
+                                    style={
+                                        isFound
+                                            ? { color: `#${entry.colour.toString(16).padStart(6, "0")}` }
+                                            : undefined
+                                    }
                                 >
-                                    {isFound ? "✦" : "·"}
+                                    {isFound ? "✦" : index + 1}
                                 </span>
                                 <span className="body">
                                     <strong>{isFound ? entry.name : t("FieldNotesUnfound")}</strong>

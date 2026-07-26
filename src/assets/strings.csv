@@ -1,7 +1,8 @@
 KEY,English,PortugueseBR,SpanishLA
 ButtonBack,‹ BACK,‹ VOLTAR,‹ ATRÁS
 ButtonClose,CLOSE,FECHAR,CERRAR
-ButtonOpenPage,OPEN THE PAGE,ABRIR A PÁGINA,ABRIR LA PÁGINA
+ButtonOpenPage,START PAINTING,COMEÇAR A PINTAR,EMPEZAR A PINTAR
+ButtonContinuePage,KEEP PAINTING,CONTINUAR PINTANDO,SEGUIR PINTANDO
 ButtonContinue,BACK TO THE PAGE,VOLTAR À PÁGINA,VOLVER A LA PÁGINA
 MenuFieldNotes,FIELD NOTES,ANOTAÇÕES,APUNTES
 MenuShop,THE KIT,O ESTOJO,EL ESTUCHE
@@ -47,7 +48,7 @@ SettingsQuality,DETAIL,DETALHE,DETALLE
 SettingsHigh,HIGH,ALTA,ALTA
 SettingsLow,LOW,BAIXA,BAJA
 SettingsUnavailable,UNAVAILABLE OUTSIDE RUN HOST,INDISPONÍVEL FORA DO RUN,NO DISPONIBLE FUERA DE RUN
-LoadingLine,ruling the page…,riscando a página…,rayando la página…
+LoadingLine,mixing the inks,misturando as tintas,mezclando las tintas
 Paused,paused,pausado,en pausa
 ToastSheetTorn,a clean sheet,uma folha limpa,una hoja limpia
 ToastAdCancelled,no nudge — the video was closed early,sem dica — o vídeo foi fechado antes,sin pista — el video se cerró antes

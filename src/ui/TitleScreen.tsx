@@ -1,10 +1,12 @@
 /**
  * The title.
  *
- * Kept to one screen with one obvious action. A returning player's discovery
- * count is the only progression shown, because it is the only progression there
- * is — and it is the thing that makes opening the page again feel like picking
- * up unfinished work rather than starting over.
+ * One screen, one obvious action. The hero is the game's own store tile —
+ * rendered by the simulation, so the first thing a player sees is a real page
+ * rather than an illustration of one.
+ *
+ * A returning player's progress meter sits directly above the button, because
+ * "seventeen of twenty" is the reason to press it.
  */
 import packageJson from "../../package.json";
 import { GAME_NAME } from "../game/constants.ts";
@@ -20,6 +22,7 @@ export default function TitleScreen() {
     useStore((state) => state.locale);
     const discoveries = useStore((state) => state.discoveryCount);
     const ownsKit = useStore((state) => state.ownsKit);
+    const percent = Math.round((discoveries / DISCOVERY_COUNT) * 100);
 
     const activate = async (action: () => void) => {
         await inkAudio.unlock();
@@ -39,39 +42,42 @@ export default function TitleScreen() {
 
     return (
         <main className="title-screen">
-            <div>
-                <h1 className="title-mark">{GAME_NAME}</h1>
-                <p className="title-tagline">{t("Tagline")}</p>
+            <div className="title-hero">
+                <img src="./thumbnail.jpg" alt="" aria-hidden="true" />
             </div>
 
-            <p className="title-blurb">{t("TitleBlurb")}</p>
+            <h1 className="title-mark">{GAME_NAME}</h1>
+            <p className="title-tagline">{t("Tagline")}</p>
 
-            {discoveries > 0 ? (
-                <p className="title-count">
-                    <span className="gilt-star" aria-hidden="true">
+            <div className="title-progress">
+                <span className="title-progress-row">
+                    <span className="star" aria-hidden="true">
                         ✦
                     </span>
                     <strong>
                         {discoveries}/{DISCOVERY_COUNT}
                     </strong>
                     <span>{t("DiscoveriesLabel")}</span>
-                </p>
-            ) : null}
+                </span>
+                <span className="meter" aria-hidden="true">
+                    <span style={{ width: `${percent}%` }} />
+                </span>
+            </div>
 
-            <button type="button" className="primary-button" onClick={open}>
-                {t("ButtonOpenPage")}
+            <button type="button" className="cta" onClick={open}>
+                {discoveries > 0 ? t("ButtonContinuePage") : t("ButtonOpenPage")}
             </button>
 
             <nav className="title-links" aria-label={GAME_NAME}>
-                <button type="button" onClick={goTo("stats")}>
+                <button type="button" className="pill" onClick={goTo("stats")}>
                     {t("MenuStats")}
                 </button>
                 {ownsKit || kitOfferUnlocked() ? (
-                    <button type="button" onClick={goTo("shop")}>
+                    <button type="button" className="pill" onClick={goTo("shop")}>
                         {t("MenuShop")}
                     </button>
                 ) : null}
-                <button type="button" onClick={goTo("settings")}>
+                <button type="button" className="pill" onClick={goTo("settings")}>
                     {t("MenuSettings")}
                 </button>
             </nav>

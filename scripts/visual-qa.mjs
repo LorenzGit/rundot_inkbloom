@@ -86,7 +86,7 @@ try {
         await page.goto(`http://localhost:${PORT}/${query}`, { waitUntil: "load" });
         await page.waitForTimeout(600);
         if (shot.pressStart) {
-            await page.getByRole("button", { name: /OPEN THE PAGE/i }).click();
+            await page.getByRole("button", { name: /START PAINTING|KEEP PAINTING/i }).click();
             // The canvas mounts asynchronously once the renderer resolves.
             await page.waitForSelector("canvas", { timeout: 10_000 });
             await page.waitForTimeout(900);

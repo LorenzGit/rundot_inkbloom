@@ -33,7 +33,7 @@ export interface PaperStyle {
     /** Ruled border and hand-written labels drawn onto the sheet. */
     readonly rule: number;
     readonly label: number;
-    /** Desk tone behind this sheet, so the whole frame shifts with it. */
+    /** Shell tone behind this sheet, so the whole frame shifts with it. */
     readonly desk: number;
     readonly deskLamp: number;
     /** True when the sheet is dark and on-page text must invert. */
@@ -55,8 +55,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "multiply",
         rule: 0x2a2622,
         label: 0x2a2622,
-        desk: 0x1b1712,
-        deskLamp: 0x3a2f22,
+        desk: 0x141222,
+        deskLamp: 0x2b2447,
         dark: false,
     },
     vellum: {
@@ -73,8 +73,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "multiply",
         rule: 0x3a3626,
         label: 0x3a3626,
-        desk: 0x1a1a12,
-        deskLamp: 0x37361f,
+        desk: 0x16182a,
+        deskLamp: 0x2f3450,
         dark: false,
     },
     nocturne: {
@@ -91,8 +91,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "screen",
         rule: 0xd7ddf2,
         label: 0xe8ecfa,
-        desk: 0x0b0d18,
-        deskLamp: 0x1d2340,
+        desk: 0x0a0c1a,
+        deskLamp: 0x1f2647,
         dark: true,
     },
     blueprint: {
@@ -109,8 +109,8 @@ export const PAPER_STYLES: Readonly<Record<PaperId, PaperStyle>> = {
         inkBlend: "screen",
         rule: 0xcfe7f6,
         label: 0xe4f2fb,
-        desk: 0x081722,
-        deskLamp: 0x123449,
+        desk: 0x08161f,
+        deskLamp: 0x14384c,
         dark: true,
     },
 };

@@ -22,7 +22,7 @@ import { ERASER_INDEX, INKS } from "../sim/elements.ts";
 import { createSimTexture, type SimTexture } from "./simTexture.ts";
 import { createPaperTexture, ruledBorderPath } from "./paperTexture.ts";
 import { paperStyle } from "./papers.ts";
-import { CREAM, GILT, HAND, MOTION, SERIF } from "./palette.ts";
+import { CREAM, GOLD, GOLD_GLOW, HAND, MOTION, MUTED, RIM, SERIF, SHELL_DEEP, SURFACE_HIGH, UI } from "./palette.ts";
 import {
     drawBottle,
     drawBrushIcon,
@@ -31,7 +31,6 @@ import {
     drawNib,
     drawTornSheetIcon,
     starPath,
-    wobblyRect,
 } from "./handDrawn.ts";
 import { readSafeInsets } from "./safeArea.ts";
 import {
@@ -67,8 +66,14 @@ export interface Scene {
 const PAGE_MARGIN = 15;
 /** Gap between the bottom of the sheet and the lip of the shelf. */
 const PAGE_TO_SHELF = 16;
-/** Reserved for the React header bar above the canvas (wordmark + counter). */
-const HEADER_RESERVE = 118;
+/**
+ * Reserved for the React HUD above the canvas.
+ *
+ * The progress chip is a 2.85rem control plus padding; at the fixed 720-unit
+ * design width that is about 150 units. Under-reserving slides the sheet
+ * beneath the chip, which looks like a bug and eats the top of the page.
+ */
+const HEADER_RESERVE = 152;
 
 type ShelfKind = "ink" | "brush" | "tear" | "mirror";
 
@@ -121,12 +126,19 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const tornSprite = new Sprite();
     const shelfGroup = new Container();
     const shelfGraphics = new Graphics();
-    const shelfLabel = new Text({ text: "", style: labelStyle(20, CREAM) });
+    const shelfLabel = new Text({
+        text: "",
+        style: new TextStyle({ fontFamily: UI, fontSize: 20, fontWeight: "800", fill: CREAM, letterSpacing: 2 }),
+    });
+    const flashGraphics = new Graphics();
     const particleGraphics = new Graphics();
     const toastGroup = new Container();
     const toastCard = new Graphics();
-    const toastTitle = new Text({ text: "", style: labelStyle(26, 0x2a2622) });
-    const toastNote = new Text({ text: "", style: labelStyle(15, 0x2a2622, HAND) });
+    const toastTitle = new Text({
+        text: "",
+        style: new TextStyle({ fontFamily: UI, fontSize: 26, fontWeight: "800", fill: 0xffffff }),
+    });
+    const toastNote = new Text({ text: "", style: new TextStyle({ fontFamily: HAND, fontSize: 15, fill: MUTED }) });
     const hintLine = new Text({ text: t("HintFirstTouch"), style: labelStyle(17, 0x2a2622, HAND) });
     const cursor = new Container();
     const cursorNib = new Graphics();
@@ -168,7 +180,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     tornSprite.visible = false;
     tornSprite.anchor.set(0.5);
 
-    stage.root.addChild(desk, pageGroup, hintLine, shelfGroup, particleGraphics, toastGroup, cursor);
+    stage.root.addChild(desk, pageGroup, flashGraphics, hintLine, shelfGroup, particleGraphics, toastGroup, cursor);
 
     // ------------------------------------------------------------------ state
 
@@ -213,6 +225,9 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const wiggles = new Float32Array(INKS.length);
     let selectionPulse = 0;
     let tearProgress = 0;
+    /** 1 the instant a secret is found, easing back to 0. */
+    let celebration = 0;
+    let celebrationColour = 0xf5b841;
     let accumulatorMs = 0;
     let frameAverageMs = 8;
     let framesSeen = 0;
@@ -418,23 +433,24 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
     function drawShelf(): void {
         const width = stage.designWidth();
-        const style = paperStyle(currentPaper);
         shelfGraphics.clear();
 
-        // The tray: a plank of the desk, lit along its front lip. Layered fills
-        // stand in for a gradient, which Pixi Graphics has no primitive for.
+        // The tray follows the same recipe as every DOM surface in the game:
+        // a top-lit gradient, a one-pixel light rim along its top edge, and a
+        // shadow cast onto it from the sheet above. Layered fills stand in for
+        // a gradient, which Pixi Graphics has no primitive for.
         const top = shelf.top;
         const bottom = stage.designHeight();
-        shelfGraphics.rect(0, top, width, bottom - top).fill({ color: style.deskLamp, alpha: 0.5 });
-        const bands = 7;
-        for (let band = 0; band < bands; band++) {
+        const height = bottom - top;
+        shelfGraphics.roundRect(-20, top, width + 40, height + 30, 26).fill({ color: SURFACE_HIGH });
+        const bands = 8;
+        for (let band = 1; band < bands; band++) {
             const t = band / bands;
-            shelfGraphics.rect(0, top + (bottom - top) * t, width, (bottom - top) / bands + 1);
-            shelfGraphics.fill({ color: 0x000000, alpha: 0.05 + t * 0.14 });
+            shelfGraphics.rect(0, top + height * t, width, height / bands + 1);
+            shelfGraphics.fill({ color: SHELL_DEEP, alpha: t * 0.4 });
         }
-        // The lip, and the shadow the page casts onto it.
-        shelfGraphics.rect(0, top, width, 2.5).fill({ color: CREAM, alpha: 0.2 });
-        shelfGraphics.rect(0, top + 2.5, width, 14).fill({ color: 0x000000, alpha: 0.22 });
+        shelfGraphics.roundRect(-20, top, width + 40, 3, 2).fill({ color: RIM, alpha: 0.16 });
+        shelfGraphics.rect(0, top + 3, width, 16).fill({ color: 0x000000, alpha: 0.24 });
 
         const discoveries = store.get().discoveryCount;
         for (const item of shelfItems) {
@@ -443,16 +459,35 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             const ink = item.kind === "ink" ? INKS[item.index] : undefined;
             const locked = item.kind === "ink" && !isInkUnlocked(item.index, discoveries);
 
-            // A selected bottle stands in a pool of its own colour.
-            if (isSelected && !locked && ink) {
-                shelfGraphics.ellipse(item.x, item.y + item.size * 0.52, item.size * 0.62, item.size * 0.2);
-                shelfGraphics.fill({ color: ink.colour, alpha: 0.22 });
-                shelfGraphics.ellipse(item.x, item.y + item.size * 0.52, item.size * 0.46, item.size * 0.13);
-                shelfGraphics.stroke({ width: Math.max(1.8, item.size * 0.06), color: ink.colour, alpha: 0.9 });
+            // Every control sits in a rounded slot, which is what makes the row
+            // read as a set of buttons rather than a line of loose objects.
+            const slotW = item.size * 1.28;
+            const slotH = item.size * (item.kind === "ink" ? 1.62 : 1.34);
+            const slotX = item.x - slotW / 2;
+            const slotY = item.y - slotH * (item.kind === "ink" ? 0.62 : 0.5);
+            shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 14);
+            shelfGraphics.fill({
+                color: isSelected ? (ink?.colour ?? GOLD) : 0x000000,
+                alpha: isSelected ? 0.28 : 0.22,
+            });
+            if (isSelected && !locked) {
+                shelfGraphics.roundRect(slotX, slotY, slotW, slotH, 14);
+                shelfGraphics.stroke({ width: 2.4, color: GOLD, alpha: 0.95 });
+                // A soft bloom so the choice is unmistakable at a glance.
+                for (let ring = 3; ring >= 1; ring--) {
+                    shelfGraphics.roundRect(
+                        slotX - ring * 2,
+                        slotY - ring * 2,
+                        slotW + ring * 4,
+                        slotH + ring * 4,
+                        14 + ring * 2,
+                    );
+                    shelfGraphics.fill({ color: GOLD, alpha: 0.05 });
+                }
             }
 
             shelfGraphics.save();
-            shelfGraphics.translateTransform(item.x, item.y + (isSelected ? -item.size * 0.12 : 0));
+            shelfGraphics.translateTransform(item.x, item.y + (isSelected ? -item.size * 0.1 : 0));
             if (wiggle > 0) shelfGraphics.rotateTransform(Math.sin(wiggle * 24) * 0.13 * wiggle);
 
             if (item.kind === "ink" && ink) {
@@ -460,7 +495,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
                 else drawBottle(shelfGraphics, { size: item.size, colour: ink.colour, locked, onDesk: true });
                 if (locked) drawLockDisc(shelfGraphics, item.size);
             } else if (item.kind === "brush") {
-                drawBrushIcon(shelfGraphics, item.size, largeBrush, INKS[selected]?.colour ?? GILT, true);
+                drawBrushIcon(shelfGraphics, item.size, largeBrush, INKS[selected]?.colour ?? GOLD, true);
             } else if (item.kind === "mirror") {
                 drawMirrorIcon(shelfGraphics, item.size);
             } else {
@@ -480,7 +515,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             g.quadraticCurveTo(direction * size * 0.34, size * 0.02, direction * size * 0.14, -size * 0.26);
             g.stroke({
                 width: Math.max(1.5, size * 0.055),
-                color: INKS[selected]?.colour ?? GILT,
+                color: INKS[selected]?.colour ?? GOLD,
                 alpha: mirror ? 0.95 : 0.4,
                 cap: "round",
             });
@@ -499,7 +534,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const lockMarks: Text[] = INKS.map((ink) => {
         const mark = new Text({
             text: ink.unlockAt > 0 ? `${ink.unlockAt}` : "",
-            style: new TextStyle({ fontFamily: SERIF, fontSize: 16, fill: CREAM, align: "center" }),
+            style: new TextStyle({ fontFamily: UI, fontSize: 16, fontWeight: "800", fill: GOLD, align: "center" }),
         });
         mark.anchor.set(0.5);
         mark.alpha = 0.85;
@@ -524,10 +559,17 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     ] as const) {
         const caption = new Text({
             text: label,
-            style: new TextStyle({ fontFamily: HAND, fontSize: 13, fill: CREAM, align: "center" }),
+            style: new TextStyle({
+                fontFamily: UI,
+                fontSize: 13,
+                fontWeight: "700",
+                fill: MUTED,
+                align: "center",
+                letterSpacing: 0.6,
+            }),
         });
         caption.anchor.set(0.5, 0);
-        caption.alpha = 0.5;
+        caption.alpha = 0.9;
         caption.visible = false;
         shelfGroup.addChild(caption);
         toolCaptions.set(kind, caption);
@@ -909,10 +951,12 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     // ---------------------------------------------------------------- toasts
 
     function updateToasts(dt: number): void {
-        for (const celebration of takeCelebrations()) {
-            toasts.push({ ...celebration, age: 0 });
-            if (celebration.kind === "unlock") inkAudio.play("unlock");
-            if (celebration.cell !== null) burstAtCell(celebration.cell, celebration.colour, 14);
+        for (const event of takeCelebrations()) {
+            toasts.push({ ...event, age: 0 });
+            if (event.kind === "unlock") inkAudio.play("unlock");
+            if (event.cell !== null) burstAtCell(event.cell, event.colour, 18);
+            celebration = 1;
+            celebrationColour = event.colour;
         }
 
         const current = toasts[0];
@@ -932,38 +976,72 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const eased = 1 - (1 - entered) ** 3;
         const fade = current.age > duration - 0.3 ? (duration - current.age) / 0.3 : Math.min(1, entered * 2.2);
 
-        const label = current.ordinal === null ? current.title : `${current.title} · ${current.ordinal}/20`;
+        const label = current.title;
         toastTitle.text = label;
         toastNote.text = current.note;
-        toastTitle.style.fontSize = Math.max(18, page.w * 0.052);
-        toastNote.style.fontSize = Math.max(12, page.w * 0.031);
+        toastTitle.style.fontSize = Math.max(17, page.w * 0.045);
+        toastNote.style.fontSize = Math.max(12, page.w * 0.03);
 
-        const padding = 22;
+        const padding = 20;
+        const iconWidth = 44;
         const cardWidth = Math.min(
-            stage.designWidth() - 36,
-            Math.max(toastTitle.width, toastNote.width) + padding * 2 + 34,
+            stage.designWidth() - 32,
+            Math.max(toastTitle.width, toastNote.width) + padding * 2 + iconWidth,
         );
-        const cardHeight = toastTitle.height + toastNote.height + padding * 1.2;
+        const cardHeight = toastTitle.height + toastNote.height + padding * 1.4;
         const centreX = stage.designWidth() / 2;
-        const restY = page.y + 26;
+        const restY = page.y + 34;
         const y = reduced ? restY : -cardHeight + eased * (restY + cardHeight);
 
         toastGroup.visible = true;
         toastGroup.alpha = fade;
         toastGroup.position.set(centreX, y);
-        toastGroup.rotation = reduced ? 0 : 0.012 - eased * 0.024;
+        toastGroup.rotation = 0;
 
+        // A raised card in the game's chrome, not a note on the page: it is a
+        // reward announcement and should read like every other UI surface.
         toastCard.clear();
-        wobblyRect(toastCard, -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, current.title.length * 31);
-        toastCard.fill({ color: 0xfffdf6, alpha: 0.97 });
-        toastCard.stroke({ width: 2, color: 0x2a2622, alpha: 0.8, join: "round" });
-        starPath(toastCard, -cardWidth / 2 + 22, -cardHeight * 0.16, 9);
-        toastCard.fill({ color: current.colour, alpha: 1 });
+        toastCard.roundRect(-cardWidth / 2, -cardHeight / 2 + 5, cardWidth, cardHeight, 18);
+        toastCard.fill({ color: 0x000000, alpha: 0.45 });
+        toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 18);
+        toastCard.fill({ color: SURFACE_HIGH });
+        toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, 3, 2);
+        toastCard.fill({ color: RIM, alpha: 0.2 });
+        toastCard.roundRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 18);
+        toastCard.stroke({ width: 2, color: current.colour, alpha: 0.7 });
+
+        // The medal: the discovery's own colour behind a gold star.
+        const iconX = -cardWidth / 2 + 26;
+        toastCard.circle(iconX, 0, 15).fill({ color: current.colour, alpha: 0.9 });
+        starPath(toastCard, iconX, 0, 8);
+        toastCard.fill({ color: 0xffffff, alpha: 0.95 });
 
         toastTitle.anchor.set(0, 1);
-        toastTitle.position.set(-cardWidth / 2 + 38, 1);
+        toastTitle.position.set(-cardWidth / 2 + iconWidth + 4, 2);
         toastNote.anchor.set(0, 0);
-        toastNote.position.set(-cardWidth / 2 + 38, 3);
+        toastNote.position.set(-cardWidth / 2 + iconWidth + 4, 4);
+    }
+
+    /**
+     * The reward flash.
+     *
+     * A rim of the discovery's own colour races around the sheet and fades.
+     * It reads instantly in peripheral vision, which matters because the player
+     * is usually watching the reaction, not the counter — and unlike a particle
+     * burst it works even when the discovery happened off-screen.
+     */
+    function updateCelebration(dt: number): void {
+        flashGraphics.clear();
+        if (celebration <= 0) return;
+        celebration = Math.max(0, celebration - dt * (store.get().reducedMotion ? 4 : 1.9));
+        const strength = celebration * celebration;
+        for (let ring = 4; ring >= 1; ring--) {
+            const spread = ring * 9 * (0.4 + celebration * 0.6);
+            flashGraphics.roundRect(page.x - spread, page.y - spread, page.w + spread * 2, page.h + spread * 2, 8);
+            flashGraphics.stroke({ width: 5, color: celebrationColour, alpha: strength * 0.16 });
+        }
+        flashGraphics.roundRect(page.x - 2, page.y - 2, page.w + 4, page.h + 4, 5);
+        flashGraphics.stroke({ width: 3, color: GOLD_GLOW, alpha: strength * 0.7 });
     }
 
     // ---------------------------------------------------------------- cursor
@@ -974,7 +1052,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         if (!visible) return;
         cursorNib.clear();
         cursorNib.rotation = 0.62;
-        drawNib(cursorNib, INKS[selected]?.colour ?? GILT);
+        drawNib(cursorNib, INKS[selected]?.colour ?? GOLD);
         cursorNib.rotation = 0.62;
         cursorRing.clear();
         cursorRing.circle(0, 0, brushRadius() * (page.w / SIM_WIDTH));
@@ -1067,6 +1145,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         shelfLabel.text = INKS[selected]?.name ?? "";
         shelfLabel.alpha = 0.72;
         updateParticles(dt);
+        updateCelebration(dt);
         updateToasts(dt);
         updateCursor();
 

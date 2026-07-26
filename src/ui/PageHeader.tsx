@@ -1,16 +1,15 @@
 /**
- * The only DOM chrome over the page.
+ * The in-game HUD.
  *
- * The counter is the game's whole navigation: it shows what you have, and
- * tapping it opens what you have not. It bumps when the count changes, which
- * is the visual link between "something happened on the page" and "the journal
- * now says something new".
+ * One progress chip and two round buttons. The chip is the whole navigation:
+ * it shows what you have, fills as you find things, punches when it changes,
+ * and opens Field Notes when tapped — so the reward, the goal and the way to
+ * the journal are the same object.
  *
- * The header is pointer-events-none except for its own controls, so a stroke
- * that starts near the top of the screen still reaches the canvas.
+ * The bar is pointer-events-none except for its own controls, so a stroke that
+ * starts near the top of the screen still reaches the canvas.
  */
 import { useEffect, useRef, useState } from "react";
-import { GAME_NAME } from "../game/constants.ts";
 import { DISCOVERY_COUNT } from "../game/sim/discoveries.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
 import { store, useStore } from "../state/store.ts";
@@ -29,7 +28,7 @@ export default function PageHeader() {
         if (previous.current === discoveries) return;
         previous.current = discoveries;
         setBumped(true);
-        const timer = window.setTimeout(() => setBumped(false), 460);
+        const timer = window.setTimeout(() => setBumped(false), 500);
         return () => window.clearTimeout(timer);
     }, [discoveries]);
 
@@ -37,6 +36,7 @@ export default function PageHeader() {
     // an unkept prompt, or a nudge sitting unspent.
     const prompt = promptView();
     const attention = (prompt.available && !prompt.solved) || nudgeOffer().freeReady;
+    const percent = Math.round((discoveries / DISCOVERY_COUNT) * 100);
 
     const openNotes = () => {
         inkAudio.play("tap");
@@ -53,34 +53,39 @@ export default function PageHeader() {
 
     return (
         <header className="page-header">
-            <div className="header-mark">
-                <strong>{GAME_NAME}</strong>
-                <span>{t("Tagline")}</span>
-            </div>
+            <button
+                type="button"
+                className="progress-chip"
+                data-bumped={bumped}
+                onClick={openNotes}
+                aria-label={`${t("MenuFieldNotes")} — ${discoveries} of ${DISCOVERY_COUNT} ${t("DiscoveriesLabel")}`}
+            >
+                <span className="star" aria-hidden="true">
+                    ✦
+                </span>
+                <span className="body">
+                    <span className="count">
+                        {discoveries}
+                        <em>/{DISCOVERY_COUNT}</em> {t("DiscoveriesLabel")}
+                    </span>
+                    <span className="meter" aria-hidden="true">
+                        <span style={{ width: `${percent}%` }} />
+                    </span>
+                </span>
+            </button>
 
-            <div className="header-actions">
-                <button
-                    type="button"
-                    className="counter-chip"
-                    data-bumped={bumped}
-                    data-attention={attention}
-                    onClick={openNotes}
-                    aria-label={`${t("MenuFieldNotes")} — ${discoveries} of ${DISCOVERY_COUNT} ${t("DiscoveriesLabel")}`}
-                >
-                    <span className="gilt-star" aria-hidden="true">
-                        ✦
-                    </span>
-                    <span>
-                        <span className="count">
-                            {discoveries}/{DISCOVERY_COUNT}
-                        </span>
-                        <span className="caption">notes</span>
-                    </span>
-                </button>
-                <button type="button" className="icon-button" onClick={leave} aria-label={t("ButtonBack")}>
-                    ‹
-                </button>
-            </div>
+            <button
+                type="button"
+                className="icon-button"
+                data-attention={attention}
+                onClick={openNotes}
+                aria-label={t("MenuFieldNotes")}
+            >
+                ☰
+            </button>
+            <button type="button" className="icon-button" onClick={leave} aria-label={t("ButtonBack")}>
+                ✕
+            </button>
         </header>
     );
 }
