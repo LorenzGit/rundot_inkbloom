@@ -17,10 +17,22 @@
             "sessionCap": 6,
             "dailyCap": 3,
             "rewardMultiplier": 1
+          },
+          "borrow_ink": {
+            "enabled": true,
+            "cooldownSeconds": 60,
+            "sessionCap": 4,
+            "dailyCap": 6,
+            "rewardMultiplier": 1
           }
         },
         "products": {
-          "illuminators_kit": { "enabled": true }
+          "illuminators_kit": {
+            "enabled": true
+          },
+          "pot_of_ink": {
+            "enabled": true
+          }
         }
       }
     },

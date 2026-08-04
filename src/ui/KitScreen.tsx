@@ -1,9 +1,13 @@
 /**
- * The Illuminator's Kit.
+ * The shop.
  *
- * One product, stated plainly, with the non-payer promise printed on the same
- * screen as the price — because a game about honest discovery should not be
+ * Two products, stated plainly, with the non-payer promise printed on the same
+ * screen as the prices — because a game about honest discovery should not be
  * coy about what money does and does not buy here.
+ *
+ * The pot is the entry tier and stays visible after the Kit is bought only if
+ * the player does not own the Kit, because the Kit already gives unlimited
+ * nudges: selling a pot to someone who has that would be selling them nothing.
  *
  * Every control fails closed. Outside a RUN host, or with LiveOps disabled, the
  * button is disabled with an honest reason rather than hidden or, worse,
@@ -17,7 +21,16 @@ import { t } from "../systems/localization.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
 import { saveSystem } from "../systems/save.ts";
-import { kitPrice, kitPurchasable, markOfferSeen, purchaseKit } from "../systems/monetization.ts";
+import {
+    kitPrice,
+    kitPurchasable,
+    markOfferSeen,
+    potOfferUnlocked,
+    potPrice,
+    potPurchasable,
+    purchaseKit,
+    purchasePot,
+} from "../systems/monetization.ts";
 import Panel from "./Panel.tsx";
 
 const BENEFITS = [
@@ -29,7 +42,9 @@ const BENEFITS = [
 export default function KitScreen({ onClose }: { onClose: () => void }) {
     const ownsKit = useStore((state) => state.ownsKit);
     const paper = useStore((state) => state.paper);
+    const potNudges = useStore((state) => state.potNudges);
     const [busy, setBusy] = useState(false);
+    const [potBusy, setPotBusy] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
 
     useEffect(() => {
@@ -61,6 +76,28 @@ export default function KitScreen({ onClose }: { onClose: () => void }) {
         }
     };
 
+    const buyPot = async () => {
+        if (potBusy) return;
+        setPotBusy(true);
+        setNotice(null);
+        try {
+            const result = await purchasePot();
+            if (result === "bought") {
+                inkAudio.play("unlock");
+                void runtimeServices.haptic("success");
+                store.patch({ toast: t("ToastPotThanks") });
+            } else if (result === "pending") {
+                setNotice(t("KitPending"));
+            } else if (result === "unavailable") {
+                setNotice(t("KitUnavailable"));
+            } else if (result === "failed") {
+                setNotice(t("ToastAdFailed"));
+            }
+        } finally {
+            setPotBusy(false);
+        }
+    };
+
     const chooseSheet = (id: PaperId) => () => {
         const style = PAPER_STYLES[id];
         if (id !== "rag" && !ownsKit) return;
@@ -73,7 +110,7 @@ export default function KitScreen({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <Panel title={t("KitTitle")} kicker={ownsKit ? t("KitOwned") : "ONE PURCHASE"} onClose={onClose}>
+        <Panel title={t("KitTitle")} kicker={ownsKit ? t("KitOwned") : "TWO WAYS IN"} onClose={onClose}>
             {ownsKit ? null : (
                 <article className="kit-hero">
                     <ul className="kit-benefits">
@@ -91,6 +128,26 @@ export default function KitScreen({ onClose }: { onClose: () => void }) {
                         {busy ? "…" : purchasable ? t("KitPurchase") : t("KitUnavailable")}
                     </button>
                     {notice ? <p className="safety-note">{notice}</p> : null}
+                </article>
+            )}
+
+            {ownsKit ? null : (
+                <article className="pot-card">
+                    <div className="pot-copy">
+                        <strong>{t("PotTitle")}</strong>
+                        <span>{t("PotBlurb")}</span>
+                        {potNudges > 0 ? (
+                            <em className="pot-held">{t("PotHeld").replace("{n}", String(potNudges))}</em>
+                        ) : null}
+                    </div>
+                    <button
+                        type="button"
+                        className="pot-buy"
+                        disabled={!potPurchasable() || !potOfferUnlocked() || potBusy}
+                        onClick={() => void buyPot()}
+                    >
+                        {potBusy ? "…" : (potPrice() ?? t("PotBuy"))}
+                    </button>
                 </article>
             )}
 
@@ -119,8 +176,8 @@ export default function KitScreen({ onClose }: { onClose: () => void }) {
             </div>
 
             <p className="safety-note">
-                All twenty secrets, all ten inks, and the daily page are free to everyone, forever. The Kit changes what
-                you work on, never what you can find.
+                All sixty secrets, all eighteen inks, and the daily page are free to everyone, forever. The Kit changes
+                what you work on, never what you can find.
             </p>
         </Panel>
     );

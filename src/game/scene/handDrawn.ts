@@ -81,7 +81,7 @@ export interface BottleStyle {
  * inks arrive — which would move every target out from under the player's
  * thumb mid-session.
  *
- * The shapes are deliberately chunky: at eleven slots across a phone these are
+ * The shapes are deliberately chunky: at ten slots across a phone these are
  * roughly 40 design units wide, and anything more delicate turns to mush.
  */
 export function drawBottle(g: Graphics, style: BottleStyle): void {
@@ -174,24 +174,39 @@ export function drawBottle(g: Graphics, style: BottleStyle): void {
 /**
  * The gold badge a locked bottle wears, behind its requirement number.
  *
- * Sits low and to the right rather than over the middle, so the bottle's
- * silhouette and colour still read through — the player should see *which*
- * ink is coming, not just that something is.
+ * A pill across the foot of the slot rather than a disc in the corner, and —
+ * the part that took three goes to get right — **sized from its own number**.
+ *
+ * Every earlier version derived the badge from the bottle while the number was
+ * derived from what is legible on a phone, and the two disagreed every time the
+ * shelf changed: first the disc was narrower than a two-digit gate, then the
+ * pill was shorter than the digits' line box and the gold rim ran through them.
+ * A caller passes the geometry in; `shelfMetrics` derives it from the font size
+ * so there is one cascade and nothing left to disagree about.
+ *
+ * Sitting at the foot also leaves the bottle's silhouette and colour clear, so
+ * the player still sees *which* ink is coming, not just that something is.
  *
  * Drawn separately from the bottle so the number can live in a Text object.
  */
-export const LOCK_BADGE_OFFSET = { x: 0.3, y: 0.28 } as const;
+export interface LockBadge {
+    /** Centre of the badge, relative to the slot centre. */
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+}
 
-export function drawLockDisc(g: Graphics, size: number): void {
-    const x = size * LOCK_BADGE_OFFSET.x;
-    const y = size * LOCK_BADGE_OFFSET.y;
-    const radius = size * 0.21;
-    g.circle(x, y + size * 0.02, radius);
-    g.fill({ color: 0x000000, alpha: 0.45 });
-    g.circle(x, y, radius);
+export function drawLockPill(g: Graphics, badge: LockBadge, scale: number): void {
+    const w = badge.width * scale;
+    const h = badge.height * scale;
+    const y = badge.y * scale;
+    g.roundRect(-w / 2, y - h / 2 + h * 0.08, w, h, h / 2);
+    g.fill({ color: 0x000000, alpha: 0.4 });
+    g.roundRect(-w / 2, y - h / 2, w, h, h / 2);
     g.fill({ color: 0x1a1528 });
-    g.circle(x, y, radius);
-    g.stroke({ width: Math.max(1.4, size * 0.045), color: GOLD, alpha: 0.95 });
+    g.roundRect(-w / 2, y - h / 2, w, h, h / 2);
+    g.stroke({ width: Math.max(1.4, h * 0.11), color: GOLD, alpha: 0.95 });
 }
 
 /**

@@ -49,6 +49,8 @@ const PAINT = `() => {
     if (!canvas) return "no canvas";
     const slots = window.__gameQa?.shelfSlots?.() ?? [];
     if (slots.length === 0) return "no shelf geometry";
+    const sheet = window.__gameQa?.pageRect?.();
+    if (!sheet) return "no page geometry";
     const rect = canvas.getBoundingClientRect();
     const send = (target, type, x, y) =>
         target.dispatchEvent(
@@ -61,18 +63,67 @@ const PAINT = `() => {
         send(window, "pointerup", rect.left + slot.x, rect.top + slot.y);
         return true;
     };
+    // Fractions are of the *sheet*, not the viewport: the shelf has grown
+    // twice now, and both times viewport fractions quietly walked the strokes
+    // off the paper while the run kept reporting success.
     const stroke = (fraction, from, to) => {
-        const y = rect.top + rect.height * (0.09 + fraction * 0.68);
-        send(canvas, "pointerdown", rect.left + rect.width * from, y);
-        for (let step = 0; step <= 30; step++) send(window, "pointermove", rect.left + rect.width * (from + (to - from) * (step / 30)), y);
-        send(window, "pointerup", rect.left + rect.width * to, y);
+        const y = rect.top + sheet.y + sheet.height * fraction;
+        const sx = (t) => rect.left + sheet.x + sheet.width * t;
+        send(canvas, "pointerdown", sx(from), y);
+        for (let step = 0; step <= 30; step++) send(window, "pointermove", sx(from + (to - from) * (step / 30)), y);
+        send(window, "pointerup", sx(to), y);
     };
     if (!pick(3)) return "no briar slot";
-    for (const f of [0.99, 0.95, 0.91]) stroke(f, 0.08, 0.92);
-    pick(1); stroke(0.24, 0.10, 0.50);
-    pick(0); stroke(0.42, 0.52, 0.92);
-    pick(2); stroke(0.84, 0.80, 0.94);
+    for (const f of [0.96, 0.92, 0.88]) stroke(f, 0.08, 0.92);
+    pick(1); stroke(0.22, 0.10, 0.50);
+    pick(0); stroke(0.40, 0.52, 0.92);
+    pick(2); stroke(0.82, 0.80, 0.94);
     return "painted";
+}`;
+
+/**
+ * Make the page as loud as it ever gets, and measure it.
+ *
+ * Every continuous sound at once — a burning thicket plus a nib dragged across
+ * the sheet — because that is the state a player described as noise. Measuring
+ * an idle page measures the analyser's floor instead of the game.
+ */
+const MEASURE_LOUD = `async () => {
+    const canvas = document.querySelector("canvas");
+    const rect = canvas.getBoundingClientRect();
+    const sheet = window.__gameQa.pageRect();
+    const slots = window.__gameQa.shelfSlots();
+    const send = (target, type, x, y) =>
+        target.dispatchEvent(new PointerEvent(type, { pointerId: 1, pointerType: "touch", clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    const pick = (index) => {
+        const slot = slots.find((entry) => entry.kind === "ink" && entry.index === index);
+        send(canvas, "pointerdown", rect.left + slot.x, rect.top + slot.y);
+        send(window, "pointerup", rect.left + slot.x, rect.top + slot.y);
+    };
+    const at = (t) => rect.left + sheet.x + sheet.width * t;
+    const stroke = (fraction, from, to) => {
+        const y = rect.top + sheet.y + sheet.height * fraction;
+        send(canvas, "pointerdown", at(from), y);
+        for (let step = 0; step <= 40; step++) send(window, "pointermove", at(from + (to - from) * (step / 40)), y);
+        send(window, "pointerup", at(to), y);
+    };
+    pick(3);
+    for (const f of [0.55, 0.63, 0.71, 0.79, 0.87, 0.95]) stroke(f, 0.04, 0.96);
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    pick(2);
+    stroke(0.5, 0.04, 0.96);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const measuring = window.__gameQa.measureAudio(2200);
+    const y0 = rect.top + sheet.y + sheet.height * 0.3;
+    pick(0);
+    send(canvas, "pointerdown", at(0.05), y0);
+    for (let step = 0; step < 200; step++) {
+        send(window, "pointermove", at(0.05 + 0.9 * ((step % 40) / 40)), y0 + (step / 200) * sheet.height * 0.35);
+        if (step % 6 === 0) await new Promise((resolve) => setTimeout(resolve, 14));
+    }
+    send(window, "pointerup", at(0.95), y0);
+    return await measuring;
 }`;
 
 fs.mkdirSync(outputDir, { recursive: true });
@@ -123,6 +174,104 @@ try {
             const found = await page.evaluate(() => window.__gameQa?.snapshot()?.discoveries ?? -1);
             if (typeof found !== "number" || found < 1) {
                 problems.push(`painting produced no discoveries (${String(found)}) — input or simulation is broken`);
+            }
+
+            // Bare plank under the last control reads as an unfinished screen
+            // and is easy to introduce by changing the row maths in one place
+            // and the height maths in another.
+            const sheet = await page.evaluate(() => window.__gameQa?.pageRect() ?? null);
+            if (sheet) {
+                // The bottom inset is reserved on purpose — a home indicator
+                // sits there — so only the padding beyond it is slack.
+                const slack = VIEWPORT.height - sheet.shelfContentBottom - sheet.safeBottom;
+                if (slack > 26) problems.push(`${slack.toFixed(0)}px of empty shelf below the last control`);
+                if (slack < 0) problems.push(`shelf controls run ${(-slack).toFixed(0)}px off the bottom`);
+            } else {
+                problems.push("the scene published no page geometry");
+            }
+
+            // What the game actually sounds like, as a number.
+            //
+            // Spectral flatness is 1.0 for white noise and falls toward 0 as a
+            // signal becomes tonal, so "it sounds like noise" is measurable
+            // rather than a matter of taste. Measured over a burning page —
+            // the state where every continuous sound is running at once — the
+            // shipped mix measures ~1.1e-5 flatness at a ~415Hz centroid. The
+            // broadband synthesis it replaced measured 2.0e-4 at 1068Hz —
+            // twenty times flatter and an octave brighter — and that is what a
+            // player heard as static. Both thresholds sit between the two, so
+            // this catches a regression back to hiss without policing tuning.
+            const spectrum = await page.evaluate(`(${MEASURE_LOUD})()`);
+            if (!spectrum || spectrum.samples < 4) {
+                // Not a verdict on the mix: the scenario failed to make the
+                // page loud, so there is nothing to judge and saying "fine"
+                // would be covering nothing.
+                problems.push(`audio measurement got ${spectrum?.samples ?? 0} loud windows — the scenario is wrong`);
+            } else {
+                if (spectrum.flatness > 8e-5) {
+                    problems.push(`audio spectral flatness ${spectrum.flatness.toExponential(2)} — the mix is hissy`);
+                }
+                if (spectrum.centroid > 900) {
+                    problems.push(`audio centroid ${spectrum.centroid.toFixed(0)}Hz — the mix is too bright`);
+                }
+            }
+
+            // The borrow offer: a surface reached only by tapping a locked
+            // bottle, which no other shot in this run does.
+            await page.evaluate(() => window.__gameQa?.openBorrowOffer(6));
+            await page.waitForTimeout(300);
+            const offerOpen = await page.evaluate(() => document.querySelectorAll(".borrow-sheet").length);
+            if (offerOpen !== 1) problems.push(`borrow offer did not render (${offerOpen} sheets)`);
+            const granted = await page.evaluate(() => window.__gameQa?.snapshot()?.borrowedInk ?? null);
+            if (granted !== null) problems.push("opening the borrow offer granted the loan without an ad");
+            await page.screenshot({ path: path.join(outputDir, "07-borrow-offer.png") });
+            await page.evaluate(() => window.__gameQa?.openPage());
+            await page.waitForTimeout(200);
+
+            // Audio, at the two moments it has actually gone wrong: a page busy
+            // enough to be making every continuous sound at once, and the trip
+            // back to the menu afterwards.
+            //
+            // `activeVoices` is the real assertion. The page voice is a
+            // permanent looping source gated only by a bus gain, so nothing
+            // about destroying the Pixi scene stopped it — the bed droned on
+            // through the main menu. A screenshot cannot see that; this can.
+            const busy = await page.evaluate(() => window.__gameQa?.snapshot()?.audio ?? null);
+            if (!busy) {
+                problems.push("no audio snapshot while painting");
+            } else if (busy.activeVoices > 14) {
+                problems.push(`${busy.activeVoices} audio voices on a busy page — the voice budget is not holding`);
+            }
+
+            await page.evaluate(() => window.__gameQa?.returnToTitle());
+            await page.waitForTimeout(400);
+            const quiet = await page.evaluate(() => window.__gameQa?.snapshot()?.audio ?? null);
+            if (!quiet) {
+                problems.push("no audio snapshot after returning to the title");
+            } else {
+                if (!quiet.pageSilent) problems.push("the page was not silenced on the way back to the menu");
+                if (quiet.pageVoiceGain > 0) {
+                    problems.push(`page voice still open at ${quiet.pageVoiceGain} on the title screen`);
+                }
+            }
+            await page.goto(`http://localhost:${PORT}/${query}`, { waitUntil: "load" });
+            await page.waitForTimeout(400);
+            await page.getByRole("button", { name: /START PAINTING|KEEP PAINTING/i }).click();
+            await page.waitForSelector("canvas", { timeout: 10_000 });
+            await page.waitForTimeout(600);
+
+            // A number that overflows its own badge reads as a rendering bug
+            // and is invisible to everything except a person squinting at a
+            // screenshot. It has happened twice.
+            const badges = await page.evaluate(() => window.__gameQa?.lockBadges() ?? []);
+            if (!Array.isArray(badges) || badges.length === 0) {
+                problems.push("no locked bottles published a badge — the check is covering nothing");
+            }
+            for (const badge of badges) {
+                const padX = badge.pill.width / 2 - badge.text.width / 2;
+                const padY = badge.pill.height / 2 - badge.text.height / 2;
+                if (padX < 2) problems.push(`lock badge ${badge.index}: number overflows the pill sideways`);
+                if (padY < 2) problems.push(`lock badge ${badge.index}: number overflows the pill vertically`);
             }
 
             // Overlapping controls are invisible to a screenshot diff and

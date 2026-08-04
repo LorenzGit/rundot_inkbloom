@@ -22,6 +22,7 @@ export default function FieldNotesScreen({ onClose }: { onClose: () => void }) {
     const ownsKit = useStore((state) => state.ownsKit);
     useStore((state) => state.hintsWatchedToday);
     useStore((state) => state.freeHintUsed);
+    useStore((state) => state.potNudges);
     const [busyId, setBusyId] = useState<string | null>(null);
 
     const nudges = offer();
@@ -56,13 +57,15 @@ export default function FieldNotesScreen({ onClose }: { onClose: () => void }) {
     // look like a store rather than a journal.
     const budgetLine = ownsKit
         ? t("NudgeKit")
-        : nudges.freeReady
-          ? t("NudgeFree")
-          : nudges.adVisible
-            ? nudges.adReady
-                ? t("NudgeWatch")
-                : nudges.adReason
-            : t("NudgeSpentToday");
+        : nudges.freeSource === "pot"
+          ? t("PotHeld").replace("{n}", String(nudges.potNudges))
+          : nudges.freeReady
+            ? t("NudgeFree")
+            : nudges.adVisible
+              ? nudges.adReady
+                  ? t("NudgeWatch")
+                  : nudges.adReason
+              : t("NudgeSpentToday");
 
     return (
         <Panel title={t("FieldNotesTitle")} kicker={`${found.length} / ${DISCOVERY_COUNT}`} onClose={onClose}>
@@ -104,7 +107,7 @@ export default function FieldNotesScreen({ onClose }: { onClose: () => void }) {
                             <div className="note-entry" data-found={isFound} data-hinted={isHinted}>
                                 {/* Found entries wear their own colour and a star; the rest
                                     carry their number, so the list reads as a checklist of
-                                    twenty rather than a column of blanks. */}
+                                    sixty rather than a column of blanks. */}
                                 <span
                                     className="mark"
                                     aria-hidden="true"

@@ -19,6 +19,7 @@ import { createPurchaseCoordinator, type PendingPurchaseIntent } from "../helper
 import type { MonetizationLiveOps } from "../helpers/monetization/monetizationLiveOps.ts";
 import {
     classifyPurchaseError,
+    consumeEntitlement,
     findConfirmedOrder,
     getEntitlementQuantity,
     getShopItem,
@@ -39,8 +40,10 @@ import {
     FREE_NUDGE_DAILY_CAP,
     monetizationPlan,
     placements,
+    PLACEMENT_BORROW_INK,
     PLACEMENT_MARGIN_NUDGE,
     PRODUCT_KIT,
+    PRODUCT_POT,
     products,
 } from "./monetizationConfig.ts";
 
@@ -59,8 +62,11 @@ const telemetry = createMonetizationTelemetry({
 
 let liveOps: MonetizationLiveOps = createMonetizationLiveOps(null, false);
 let catalogPrice: string | null = null;
+let potPriceText: string | null = null;
 let lastNudgeAt = 0;
 let nudgesThisSession = 0;
+let lastBorrowAt = 0;
+let borrowsThisSession = 0;
 
 /**
  * Idempotency keys are order identifiers, not gameplay randomness, so they use
@@ -137,6 +143,34 @@ async function syncKitOwnership(source: string): Promise<boolean> {
     return owned;
 }
 
+/**
+ * Read the bought-nudge balance from the host.
+ *
+ * Same rule as ownership: a `null` quantity is "the host could not tell us",
+ * not zero, and the last known balance is kept. The difference is that a stale
+ * balance can only ever cause a *refused* spend, never a granted one — the
+ * spend itself goes through `consumeEntitlement` and is authoritative.
+ */
+async function syncPotBalance(source: string): Promise<number> {
+    const previous = store.get().potNudges;
+    if (!isConfiguredPlatformId(PLATFORM_IDS.nudgeEntitlement)) return previous;
+
+    const quantity = await getEntitlementQuantity(PLATFORM_IDS.nudgeEntitlement);
+    if (quantity === null) return previous;
+
+    const balance = Math.max(0, Math.floor(quantity));
+    if (balance !== previous) {
+        store.patch({ potNudges: balance });
+        await saveSystem.flush();
+    }
+    telemetry.record("entitlement_synced", {
+        entitlement_id: PLATFORM_IDS.nudgeEntitlement,
+        quantity: balance,
+        source,
+    });
+    return balance;
+}
+
 // ---------------------------------------------------------------- eligibility
 
 /** Has the player reached the point where the Kit is a real want? */
@@ -159,6 +193,30 @@ export function kitPurchasable(): boolean {
 /** The live catalog price, or null when the catalog has not answered. */
 export function kitPrice(): string | null {
     return catalogPrice;
+}
+
+/**
+ * Is a pot purchasable right now?
+ *
+ * Unlike the Kit this is never "already owned": a pot is a consumable and a
+ * second one adds to the same balance.
+ */
+export function potPurchasable(): boolean {
+    return (
+        liveOps.purchasesEnabled &&
+        liveOps.products[PRODUCT_POT]?.enabled === true &&
+        hasShop() &&
+        isConfiguredPlatformId(PLATFORM_IDS.potOfInkItem)
+    );
+}
+
+/** The pot is worth offering once the player knows what a nudge is for. */
+export function potOfferUnlocked(): boolean {
+    return store.get().discoveryCount >= 1;
+}
+
+export function potPrice(): string | null {
+    return potPriceText;
 }
 
 export interface NudgeAvailability {
@@ -216,6 +274,63 @@ export function nudgeAvailability(): NudgeAvailability {
     return { visible: true, ready: true, reason: "", remainingToday: remaining };
 }
 
+export interface BorrowAvailability {
+    visible: boolean;
+    ready: boolean;
+    reason: string;
+    remainingToday: number | null;
+}
+
+/**
+ * Can the player borrow the next locked ink right now?
+ *
+ * Deliberately shaped like `nudgeAvailability`, including the "visible but
+ * disabled with an honest reason" state outside a RUN host: a surface nobody
+ * sees until production is a surface nobody tests.
+ */
+export function borrowAvailability(): BorrowAvailability {
+    const state = store.get();
+    const placement = placements.get(PLACEMENT_BORROW_INK);
+    const remote = liveOps.placements[PLACEMENT_BORROW_INK];
+    if (!placement || !liveOps.rewardedAdsEnabled || remote?.enabled !== true) {
+        return { visible: false, ready: false, reason: "", remainingToday: 0 };
+    }
+    if (!isConfiguredPlatformId(PLATFORM_IDS.borrowInkRewarded)) {
+        return { visible: false, ready: false, reason: "", remainingToday: 0 };
+    }
+    if (state.discoveryCount < placement.unlock.minProgression) {
+        return { visible: false, ready: false, reason: "", remainingToday: 0 };
+    }
+    if (!getRunCapabilities().ads) {
+        return { visible: true, ready: false, reason: "no video here — RUN only", remainingToday: 0 };
+    }
+    // One loan at a time. Two borrowed bottles would be a shelf the player did
+    // not earn, which is the thing the gates exist to prevent.
+    if (state.borrowedInk !== null) {
+        return { visible: true, ready: false, reason: "one bottle on loan already", remainingToday: null };
+    }
+
+    const day = localDayKey(serverNow());
+    const usedToday = state.borrowDay === day ? state.borrowsToday : 0;
+    const remaining = Math.max(0, remote.dailyCap - usedToday);
+    if (remaining <= 0) {
+        return { visible: true, ready: false, reason: "no more loans today", remainingToday: 0 };
+    }
+    if (borrowsThisSession >= remote.sessionCap) {
+        return { visible: true, ready: false, reason: "enough for one sitting", remainingToday: remaining };
+    }
+    const waited = (Date.now() - lastBorrowAt) / 1_000;
+    if (lastBorrowAt > 0 && waited < remote.cooldownSeconds) {
+        return {
+            visible: true,
+            ready: false,
+            reason: `ready in ${Math.ceil(remote.cooldownSeconds - waited)}s`,
+            remainingToday: remaining,
+        };
+    }
+    return { visible: true, ready: true, reason: "", remainingToday: remaining };
+}
+
 // -------------------------------------------------------------------- actions
 
 export type NudgeResult = "granted" | "unavailable" | "cancelled" | "failed";
@@ -256,6 +371,98 @@ export async function watchForNudge(): Promise<NudgeResult> {
     await saveSystem.flush();
     telemetry.record("reward_granted", { placement_id: PLACEMENT_MARGIN_NUDGE, reward_id: "margin_nudge", amount: 1 });
     return "granted";
+}
+
+export type BorrowResult = "granted" | "unavailable" | "cancelled" | "failed";
+
+/**
+ * Watch a rewarded video to borrow a shelf slot for the current sheet.
+ *
+ * The loan is granted only on a verified completion, and only for the slot the
+ * caller asked about — which the shelf guarantees is the *next* locked one.
+ */
+export async function watchToBorrow(slot: number): Promise<BorrowResult> {
+    if (!borrowAvailability().ready) return "unavailable";
+
+    telemetry.record("ad_requested", { placement_id: PLACEMENT_BORROW_INK, slot });
+    const outcome: VerifiedActionResult = await showVerifiedRewardedAd(PLATFORM_IDS.borrowInkRewarded, "Borrow an Ink");
+    telemetry.record("ad_result", { placement_id: PLACEMENT_BORROW_INK, outcome, slot });
+
+    if (outcome !== "verified") {
+        return outcome === "cancelled" ? "cancelled" : outcome === "unavailable" ? "unavailable" : "failed";
+    }
+
+    lastBorrowAt = Date.now();
+    borrowsThisSession += 1;
+    const day = localDayKey(serverNow());
+    const current = store.get();
+    store.patch({
+        borrowedInk: slot,
+        borrowOffer: null,
+        borrowDay: day,
+        borrowsToday: current.borrowDay === day ? current.borrowsToday + 1 : 1,
+    });
+    await saveSystem.flush();
+    telemetry.record("reward_granted", { placement_id: PLACEMENT_BORROW_INK, reward_id: "borrow_ink", amount: 1 });
+    return "granted";
+}
+
+/** The loan lasts as long as the sheet does. A new sheet is a new shelf. */
+export function endBorrow(): void {
+    if (store.get().borrowedInk === null) return;
+    store.patch({ borrowedInk: null, borrowOffer: null });
+    void saveSystem.flush();
+}
+
+export type PotSpendResult = "spent" | "empty" | "unavailable";
+
+/**
+ * Spend one bought nudge.
+ *
+ * The server decides. There is no path here that decrements the local cache
+ * and hopes — a host that cannot be reached returns `unavailable`, the caller
+ * reveals nothing, and the player still has their pot.
+ */
+export async function spendPotNudge(): Promise<PotSpendResult> {
+    if (store.get().potNudges <= 0) return "empty";
+    if (!isConfiguredPlatformId(PLATFORM_IDS.nudgeEntitlement)) return "unavailable";
+
+    const left = await consumeEntitlement(PLATFORM_IDS.nudgeEntitlement, 1, "nudge_spent");
+    if (left === null) return "unavailable";
+
+    store.patch({ potNudges: Math.max(0, left) });
+    await saveSystem.flush();
+    telemetry.record("reward_granted", { product_id: PRODUCT_POT, reward_id: "pot_nudge", amount: 1, remaining: left });
+    return "spent";
+}
+
+export type PotPurchaseResult = "bought" | "unavailable" | "cancelled" | "failed" | "pending";
+
+/** Open checkout for a Pot of Ink. */
+export async function purchasePot(): Promise<PotPurchaseResult> {
+    if (!potPurchasable()) return "unavailable";
+
+    telemetry.record("purchase_tapped", { product_id: PRODUCT_POT });
+    telemetry.record("checkout_started", { product_id: PRODUCT_POT, price: potPriceText });
+    try {
+        const outcome = await coordinator.purchase(PRODUCT_POT, PLATFORM_IDS.potOfInkItem);
+        telemetry.record("checkout_result", { product_id: PRODUCT_POT, status: outcome.status });
+        if (outcome.status === "confirmed") {
+            await syncPotBalance("purchase");
+            return "bought";
+        }
+        if (outcome.status === "cancelled") return "cancelled";
+        if (outcome.status === "unknown") {
+            // Ambiguous: the balance is the only honest answer, so re-read it.
+            await syncPotBalance("purchase-unknown");
+            return "pending";
+        }
+        return "failed";
+    } catch (error) {
+        telemetry.record("checkout_result", { product_id: PRODUCT_POT, status: "threw" });
+        console.warn("[monetization] pot checkout failed", error);
+        return "failed";
+    }
 }
 
 export type KitPurchaseResult = "owned" | "unavailable" | "cancelled" | "failed" | "pending";
@@ -323,6 +530,14 @@ export const monetization = {
         }
 
         await syncKitOwnership("boot");
+        await syncPotBalance("boot");
+
+        if (potPurchasable()) {
+            const pot = await getShopItem(PLATFORM_IDS.potOfInkItem);
+            potPriceText = pot?.price
+                ? `${pot.price.value} ${pot.price.type === "bucks" ? "RB" : pot.price.type}`
+                : null;
+        }
 
         if (kitPurchasable()) {
             const item = await getShopItem(PLATFORM_IDS.illuminatorsKitItem);
@@ -350,13 +565,20 @@ export const monetization = {
     /** Re-read ownership after a resume, in case it changed on another device. */
     async resume(): Promise<void> {
         await syncKitOwnership("resume");
+        await syncPotBalance("resume");
     },
 
     /** Reset per-day counters when the trusted day rolls over. */
     rolloverDay(day: string): void {
         const state = store.get();
         if (state.hintDay === day) return;
-        store.patch({ hintDay: day, hintsWatchedToday: 0, freeHintUsed: false });
+        store.patch({
+            hintDay: day,
+            hintsWatchedToday: 0,
+            freeHintUsed: false,
+            borrowDay: day,
+            borrowsToday: 0,
+        });
         void saveSystem.flush();
     },
 };

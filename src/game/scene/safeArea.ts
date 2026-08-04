@@ -1,11 +1,12 @@
 /**
  * Host insets, in CSS pixels, readable from Pixi.
  *
- * The React shell publishes RUN's safe area onto `documentElement` as
- * `--safe-*` custom properties, with `env(safe-area-inset-*)` as the fallback
- * for plain browsers. Reading the resolved custom property means the canvas
- * respects notches, home indicators, and the RUN header without the scene
- * needing to know which of those it is dealing with.
+ * `applyRunSafeArea` publishes resolved pixel values onto `--safe-*`. Reading
+ * those means the canvas respects notches, home indicators, and the RUN header
+ * without the scene needing to know which of those it is dealing with.
+ *
+ * Important: do not expect a bare `env(...)` token in `--safe-*` to parse —
+ * `parseFloat` cannot read it. Boot always publishes pixels first.
  */
 export interface SafeInsets {
     top: number;

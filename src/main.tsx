@@ -6,6 +6,7 @@ import { store } from "./state/store.ts";
 import { applyRunSafeArea, initSdk, registerLifecycles, requestHostExit } from "./sdk/runSdk.ts";
 import { warmAssets } from "./assets/preload.ts";
 import { saveSystem } from "./systems/save.ts";
+import { folio } from "./systems/folio.ts";
 import { restoreLocale } from "./systems/localization.ts";
 import { inkAudio } from "./audio/inkAudio.ts";
 import { runtimeServices } from "./systems/runtimeServices.ts";
@@ -126,6 +127,9 @@ async function boot() {
     //    throw into this function.
     runtimeServices.bootstrap();
     runtimeServices.funnel(0, "game_loaded", "inkbloom_first_session", 1);
+    // The Folio is cosmetic and its images are heavy, so it loads after boot
+    // rather than holding up the first paint.
+    void folio.load();
     installBrowserQaContract();
 
     // The daily brief and the nudge budget both hinge on the trusted day, so

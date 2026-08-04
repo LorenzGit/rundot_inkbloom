@@ -14,14 +14,26 @@
  * a surface on.
  */
 export const PLATFORM_IDS = Object.freeze({
-    gameId: "REPLACE_WITH_RUN_GAME_ID",
+    gameId: "gCoSWVsu7MchgqeaLNrM",
 
     /** Rewarded video that buys one nudge toward a still-unfound secret. */
     marginNudgeRewarded: "inkbloom_margin_nudge_rewarded",
+    /** Rewarded video that lends the next locked ink for the current sheet. */
+    borrowInkRewarded: "inkbloom_borrow_ink_rewarded",
 
-    /** The Illuminator's Kit — the game's single durable product. */
+    /** The Illuminator's Kit — the durable tier. */
     illuminatorsKitItem: "inkbloom_illuminators_kit",
     illuminatorsKitEntitlement: "inkbloom_illuminators_kit",
+
+    /**
+     * A Pot of Ink — the consumable tier.
+     *
+     * The item and the entitlement are deliberately *not* the same string: the
+     * item is one purchase of a pot, the entitlement is the nudge balance it
+     * pours into, and a second purchase adds to the same balance.
+     */
+    potOfInkItem: "inkbloom_pot_of_ink",
+    nudgeEntitlement: "inkbloom_nudges",
 });
 
 export function isConfiguredPlatformId(value: string): boolean {

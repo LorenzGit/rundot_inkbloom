@@ -19,7 +19,7 @@
  *
  * Casual mobile games are high-key and saturated. A near-black shell reads as a
  * premium puzzle game; this reads as something you play on a bus. The teal is
- * also the one hue none of the ten inks use, so every ink stays legible on it.
+ * also the one hue none of the eighteen inks use, so every ink stays legible on it.
  */
 export const SHELL = 0x148c8c;
 export const SHELL_DEEP = 0x0a5457;

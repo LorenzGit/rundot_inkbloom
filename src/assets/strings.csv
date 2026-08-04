@@ -14,7 +14,7 @@ HintFirstTouch,"paint anywhere — mix inks, find their secrets",pinte em qualqu
 DiscoveriesLabel,discoveries,descobertas,descubrimientos
 FieldNotesTitle,Field Notes,Anotações de Campo,Apuntes de Campo
 FieldNotesUnfound,· · · · ·,· · · · ·,· · · · ·
-FieldNotesUnlockLine,new inks arrive at 4 · 8 · 12 · 16 discoveries,novas tintas chegam com 4 · 8 · 12 · 16 descobertas,nuevas tintas llegan con 4 · 8 · 12 · 16 descubrimientos
+FieldNotesUnlockLine,"new inks arrive every 4 discoveries, up to 48","novas tintas chegam a cada 4 descobertas, até 48","nuevas tintas llegan cada 4 descubrimientos, hasta 48"
 NudgeFree,ASK THE MARGIN,PERGUNTAR À MARGEM,PREGUNTAR AL MARGEN
 NudgeWatch,WATCH FOR A NUDGE,VER VÍDEO POR UMA DICA,VER VIDEO POR UNA PISTA
 NudgeSpentToday,nothing more today,nada mais por hoje,nada más por hoy
@@ -56,3 +56,26 @@ ToastAdFailed,no nudge — try again in a moment,sem dica — tente de novo em i
 ToastKitThanks,the Kit is yours — three new sheets on the shelf,o Estojo é seu — três folhas novas na prateleira,el Estuche es tuyo — tres hojas nuevas en el estante
 NotificationTitle,The ink is still wet,A tinta ainda está molhada,La tinta sigue húmeda
 NotificationReEngagementBody,"A fresh sheet is waiting, and the page still has secrets you have not caught.","Uma folha nova espera, e a página ainda guarda segredos.","Una hoja nueva espera, y la página aún guarda secretos."
+PotTitle,A POT OF INK,UM POTE DE TINTA,UN BOTE DE TINTA
+PotBlurb,Ten nudges to keep. They never expire; spend them one at a time.,Dez dicas para guardar. Nunca expiram; gaste uma de cada vez.,Diez pistas para guardar. Nunca caducan; gástalas de una en una.
+PotBuy,BUY A POT,COMPRAR UM POTE,COMPRAR UN BOTE
+PotHeld,{n} NUDGES IN THE POT,{n} DICAS NO POTE,{n} PISTAS EN EL BOTE
+PotEmpty,that pot is empty,esse pote está vazio,ese bote está vacío
+PotUnreachable,could not reach the shop,não foi possível abrir a loja,no se pudo abrir la tienda
+ToastPotThanks,ten nudges poured into the pot,dez dicas no pote,diez pistas en el bote
+BorrowTitle,BORROW THIS INK?,PEGAR ESTA TINTA EMPRESTADA?,¿TOMAR PRESTADA ESTA TINTA?
+BorrowBlurb,Watch a short video and this bottle joins the shelf until you tear the sheet. It stays locked until you have earned it.,Assista a um vídeo curto e este frasco fica na prateleira até você rasgar a folha. Continua bloqueado até você conquistá-lo.,Mira un vídeo corto y este frasco se queda en el estante hasta que rasgues la hoja. Sigue bloqueado hasta que te lo ganes.
+BorrowWatch,WATCH & BORROW,ASSISTIR E PEGAR,VER Y TOMAR PRESTADA
+BorrowDecline,NOT NOW,AGORA NÃO,AHORA NO
+ToastBorrowed,{name} is on the shelf until you tear the sheet,{name} fica na prateleira até você rasgar a folha,{name} está en el estante hasta que rasgues la hoja
+FolioTitle,THE FOLIO,O FÓLIO,EL FOLIO
+FolioEmpty,tear off a painted sheet and it is kept here,destaque uma folha pintada e ela fica guardada aqui,arranca una hoja pintada y se guarda aquí
+FolioCaption,sheet {n} · {found} secrets,folha {n} · {found} segredos,hoja {n} · {found} secretos
+FolioShare,SHARE,COMPARTILHAR,COMPARTIR
+FolioShared,the sheet is on its way,a folha está a caminho,la hoja va en camino
+FolioShareFailed,could not share the sheet,não deu para compartilhar a folha,no se pudo compartir la hoja
+FolioShareText,painted in Inkbloom — {found}/{total} secrets found,pintado no Inkbloom — {found}/{total} segredos,pintado en Inkbloom — {found}/{total} secretos
+ColophonTitle,The Colophon,O Colofão,El Colofón
+ColophonBody,"Sixty secrets, one page. The sheet has nothing left to hide from you — every ink, every reaction, yours.","Sessenta segredos, uma página. A folha não tem mais nada a esconder de você — cada tinta, cada reação, suas.","Sesenta secretos, una página. La hoja ya no tiene nada que esconderte — cada tinta, cada reacción, tuyas."
+ColophonContinue,KEEP PAINTING,CONTINUAR PINTANDO,SEGUIR PINTANDO
+ColophonRecordLine,the colophon is yours — every secret found,o colofão é seu — todos os segredos achados,el colofón es tuyo — todos los secretos hallados

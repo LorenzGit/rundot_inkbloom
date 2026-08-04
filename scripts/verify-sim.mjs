@@ -8,7 +8,7 @@
  *      `NoiseRandom` for the same (seed, position). The simulation's hot-path
  *      RNG is an optimisation of that class, not a second algorithm.
  *
- *   2. Every one of the twenty discoveries is actually reachable. Each has a
+ *   2. Every one of the sixty discoveries is actually reachable. Each has a
  *      scripted arrangement of inks; the simulation is stepped and the
  *      discovery must fire. A secret that cannot be found is a broken promise,
  *      and a silent one — this is the only thing that catches it.
@@ -28,6 +28,7 @@ const { NoiseRandom } = await loader.ssrLoadModule("/src/game/noiseRandom.ts");
 const { SimRandom } = await loader.ssrLoadModule("/src/game/sim/simRandom.ts");
 const { InkSim } = await loader.ssrLoadModule("/src/game/sim/inkSim.ts");
 const { DISCOVERIES } = await loader.ssrLoadModule("/src/game/sim/discoveries.ts");
+const { STIRS } = await loader.ssrLoadModule("/src/game/sim/stirs.ts");
 const E = await loader.ssrLoadModule("/src/game/sim/elements.ts");
 await loader.close();
 
@@ -241,6 +242,344 @@ const SCENARIOS = [
             block(sim, 10, 55, 50, 59, E.FROST);
         },
     },
+    {
+        id: "melt",
+        steps: 600,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.WAX);
+            block(sim, 24, 67, 36, 69, E.EMBER, 250);
+        },
+    },
+    {
+        id: "seal",
+        steps: 1_200,
+        setup(sim) {
+            block(sim, 20, 70, 40, 74, E.MOLTEN);
+            block(sim, 20, 75, 40, 79, E.ICE);
+        },
+    },
+    {
+        id: "quench",
+        steps: 800,
+        setup(sim) {
+            block(sim, 10, 72, 50, 79, E.RILL);
+            block(sim, 20, 66, 40, 70, E.MOLTEN);
+        },
+    },
+    {
+        id: "taper",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.MOLTEN);
+            block(sim, 24, 70, 30, 72, E.PITCH, 0, 30);
+        },
+    },
+    {
+        id: "wick",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.MOLTEN);
+            block(sim, 24, 66, 34, 69, E.BRIAR, 60, 90);
+        },
+    },
+    {
+        id: "creep",
+        steps: 2_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.BASALT);
+            block(sim, 28, 69, 30, 69, E.MOSS);
+        },
+    },
+    {
+        // A walled basin, so the water cannot simply run away from the moss.
+        // An open row lets both drift apart and the contact never lasts.
+        id: "verdant",
+        steps: 3_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.BASALT);
+            block(sim, 5, 55, 6, 69, E.BASALT);
+            block(sim, 54, 55, 55, 69, E.BASALT);
+            block(sim, 7, 69, 9, 69, E.MOSS);
+            block(sim, 10, 64, 53, 69, E.RILL);
+        },
+    },
+    {
+        id: "scorch",
+        steps: 2_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.BASALT);
+            block(sim, 10, 69, 50, 69, E.MOSS);
+            block(sim, 10, 68, 12, 68, E.EMBER, 250);
+        },
+    },
+    {
+        id: "peat",
+        steps: 2_000,
+        setup(sim) {
+            block(sim, 5, 72, 55, 79, E.SILT);
+            block(sim, 20, 71, 40, 71, E.MOSS);
+        },
+    },
+    {
+        id: "bogfire",
+        steps: 3_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.PEAT);
+            block(sim, 20, 68, 24, 69, E.EMBER, 250);
+        },
+    },
+    {
+        id: "fume",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.BASALT);
+            block(sim, 20, 66, 40, 69, E.ACID);
+        },
+    },
+    {
+        id: "firedamp",
+        steps: 3_000,
+        setup(sim) {
+            block(sim, 5, 72, 55, 79, E.BASALT);
+            block(sim, 20, 68, 40, 71, E.ACID);
+            block(sim, 20, 40, 40, 44, E.EMBER, 250);
+        },
+    },
+    {
+        id: "etched",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.GLASS);
+            block(sim, 20, 66, 40, 69, E.ACID);
+        },
+    },
+    {
+        id: "neutral",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.SALT);
+            block(sim, 20, 66, 40, 69, E.ACID);
+        },
+    },
+    {
+        id: "scour",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.BRIAR, 120);
+            block(sim, 20, 66, 40, 69, E.ACID);
+        },
+    },
+    {
+        id: "quickbead",
+        steps: 800,
+        setup(sim) {
+            block(sim, 5, 60, 55, 79, E.RILL);
+            block(sim, 26, 50, 34, 55, E.QUICK);
+        },
+    },
+    {
+        id: "sinkhole",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 60, 55, 79, E.GRIT);
+            block(sim, 26, 50, 34, 55, E.QUICK);
+        },
+    },
+    {
+        id: "quicksand",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 60, 55, 79, E.SILT);
+            block(sim, 26, 50, 34, 55, E.QUICK);
+        },
+    },
+    {
+        id: "amalgam",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 60, 55, 79, E.GRIT);
+            block(sim, 26, 50, 34, 58, E.QUICK);
+        },
+    },
+    {
+        id: "mirrorstone",
+        steps: 2_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.AMALGAM);
+            block(sim, 20, 66, 40, 69, E.ACID);
+        },
+    },
+    {
+        id: "kindle",
+        steps: 1_200,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.BRIAR, 120);
+            block(sim, 20, 66, 40, 69, E.MAGMA);
+        },
+    },
+    {
+        id: "basaltflow",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.MAGMA);
+        },
+    },
+    {
+        id: "obsidian",
+        steps: 800,
+        setup(sim) {
+            block(sim, 10, 72, 50, 79, E.RILL);
+            block(sim, 20, 66, 40, 70, E.MAGMA);
+        },
+    },
+    {
+        id: "crucible",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.GRIT);
+            block(sim, 20, 66, 40, 69, E.MAGMA);
+        },
+    },
+    {
+        id: "smelt",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.AMALGAM);
+            block(sim, 20, 66, 40, 69, E.MAGMA);
+        },
+    },
+    {
+        id: "resinset",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.RESIN);
+        },
+    },
+    {
+        id: "inclusion",
+        steps: 1_200,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 20, 72, 40, 73, E.BLOSSOM);
+            block(sim, 20, 66, 40, 71, E.RESIN);
+        },
+    },
+    {
+        id: "sapfire",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.RESIN);
+            block(sim, 24, 70, 30, 72, E.PITCH, 0, 30);
+        },
+    },
+    {
+        id: "stuck",
+        steps: 2_000,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 10, 68, 50, 73, E.RESIN);
+            block(sim, 20, 64, 40, 67, E.GRIT);
+        },
+    },
+    {
+        id: "arc",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 10, 70, 50, 73, E.QUICK);
+            block(sim, 26, 66, 34, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "brinearc",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 10, 70, 50, 73, E.BRINE);
+            block(sim, 26, 66, 34, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "fulgurite",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.GRIT);
+            block(sim, 20, 66, 40, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "electrolysis",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 10, 70, 50, 73, E.RILL);
+            block(sim, 26, 66, 34, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "shockbloom",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 20, 70, 40, 79, E.BRIAR, 120);
+            block(sim, 20, 66, 40, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "welded",
+        steps: 1_000,
+        setup(sim) {
+            block(sim, 5, 70, 55, 79, E.AMALGAM);
+            block(sim, 20, 66, 40, 69, E.VOLT, 120);
+        },
+    },
+    {
+        id: "scatter",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 24, 70, 30, 73, E.GRIT);
+            block(sim, 20, 70, 22, 73, E.GUST, 90);
+        },
+    },
+    {
+        id: "fanned",
+        steps: 1_200,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 26, 70, 34, 73, E.EMBER, 200);
+            block(sim, 20, 70, 24, 73, E.GUST, 120);
+        },
+    },
+    {
+        id: "snuffed",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 26, 70, 34, 73, E.EMBER, 200);
+            // A gust already almost spent: a strong one would feed the fire.
+            block(sim, 20, 70, 24, 73, E.GUST, 10);
+        },
+    },
+    {
+        // Spores root the instant they touch a floor, so a gust can only carry
+        // one that is still in the air. Rain them through a standing band.
+        id: "drift",
+        steps: 2_000,
+        setup(sim) {
+            block(sim, 5, 78, 55, 79, E.BASALT);
+            block(sim, 12, 34, 48, 44, E.GUST, 200);
+            block(sim, 20, 12, 40, 20, E.SPORE);
+        },
+    },
+    {
+        id: "dustdevil",
+        steps: 1_500,
+        setup(sim) {
+            block(sim, 5, 74, 55, 79, E.BASALT);
+            block(sim, 24, 70, 34, 73, E.SILT);
+            block(sim, 18, 70, 22, 73, E.GUST, 120);
+        },
+    },
 ];
 
 function verifyEveryDiscoveryIsReachable() {
@@ -296,7 +635,40 @@ function verifySettling() {
     return { liveCount: sim.liveCount };
 }
 
+/**
+ * The stir table must cover every discovery with real elements.
+ *
+ * A discovery missing from the table can never make the page stir — the tell
+ * silently goes cold for exactly that secret, which no screenshot or
+ * playthrough would ever pin down. Element ids are checked against
+ * ELEMENT_COUNT so a typo cannot point a stir at an element that does not
+ * exist.
+ */
+function verifyStirTableCoversEveryDiscovery() {
+    const missing = [];
+    for (const discovery of DISCOVERIES) {
+        const sets = STIRS.get(discovery.id);
+        if (!sets || sets.length === 0) {
+            missing.push(discovery.id);
+            continue;
+        }
+        for (const set of sets) {
+            if (set.length === 0) throw new Error(`Stir entry for "${discovery.id}" has an empty element set`);
+            for (const element of set) {
+                if (!Number.isInteger(element) || element <= 0 || element >= E.ELEMENT_COUNT) {
+                    throw new Error(`Stir entry for "${discovery.id}" names invalid element ${element}`);
+                }
+            }
+        }
+    }
+    if (missing.length > 0) throw new Error(`Discoveries with no stir entry: ${missing.join(", ")}`);
+    const orphans = [...STIRS.keys()].filter((id) => !DISCOVERIES.some((discovery) => discovery.id === id));
+    if (orphans.length > 0) throw new Error(`Stir entries for unknown discoveries: ${orphans.join(", ")}`);
+    return { entries: STIRS.size };
+}
+
 verifyRandomStreamsMatch();
+const stirTable = verifyStirTableCoversEveryDiscovery();
 const reachability = verifyEveryDiscoveryIsReachable();
 const determinism = verifyDeterminism();
 const settling = verifySettling();
@@ -307,6 +679,7 @@ console.log(
             randomStream: "SimRandom matches NoiseRandom",
             discoveries: DISCOVERIES.length,
             reachable: Object.keys(reachability).length,
+            stirTable,
             determinism,
             settling,
         },

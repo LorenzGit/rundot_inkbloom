@@ -1,9 +1,11 @@
 # Inkbloom
 
-A portrait RUN.world sandbox: ten living inks on a sheet of rag paper, twenty
-secrets to catch them keeping. PixiJS 8, WebGPU-first, React 19 shell, RUN Game
-SDK 5.24. Derived from `rundot_template`; follow the workspace `AGENTS.md` and
-`helper/AGENTS.md` for platform rules.
+A portrait RUN.world sandbox: living inks on a sheet of rag paper, sixty secrets
+to catch them keeping. PixiJS 8, WebGPU-first, React 19 shell, RUN Game SDK 5.24.
+Derived from `rundot_template`.
+
+Game ID: `gCoSWVsu7MchgqeaLNrM` (also in `game.config.prod.json` and
+`src/config/platform.ts`).
 
 ## Read before changing the renderer
 
@@ -30,6 +32,10 @@ one silently breaks the game's entire look:
 - `src/state/store.ts` is the React↔Pixi boundary. Nothing per-frame crosses it.
 - `src/sdk/runCommerce.ts` holds every call that can cost a player money.
   Ownership is read from host entitlements and never inferred.
+- Safe-area pixels are published by `applyRunSafeArea` in `src/sdk/runSdk.ts`.
+  Prefer measured browser/ViewDeck insets over the mock's tiny defaults; only a
+  real attached RUN host overrides them. Always publish resolved `px` values so
+  Pixi `readSafeInsets` and CSS agree (`parseFloat` cannot read bare `env()`).
 
 ## Content rules
 
@@ -40,12 +46,17 @@ one silently breaks the game's entire look:
 - Ink unlock gates live in `src/game/sim/elements.ts` and must stay below the
   final discovery count.
 
+## Key art
+
+Masters live in `src/assets/art/`. `npm run thumbnail` re-encodes them into
+`public/thumbnail.jpg` (512×512 store tile with the **Inkbloom** wordmark) and
+`public/title-hero.jpg`. Do not regenerate the shipping tile from the simulation;
+`scripts/thumbnail.html` is local curiosity only.
+
 ## Verification
 
 `npm run check` runs format, lint, invariants, the simulation proof, the public
-audit, and both production builds. `npm run thumbnail` re-renders the store
-tile from the simulation; re-run it after any change to the sim or the colour
-rules.
+audit, and both production builds.
 
 Development contracts (`?screen=`, `?debug=1`, `?qa=1`) must stay
 development-only and may never fabricate a RUN ad, purchase, entitlement, or

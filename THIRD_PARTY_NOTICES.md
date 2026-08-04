@@ -23,6 +23,5 @@ distributed compiled build. This file does not replace those license texts.
 | --- | --- | --- |
 | `playwright-core` | 1.62.0 | Apache-2.0 |
 
-Playwright is used only to render `public/thumbnail.jpg` from the game's own
-simulation (`scripts/make-thumbnail.mjs`) and for local browser verification.
-It is not included in the compiled game bundle.
+Playwright is used for local browser verification (`scripts/visual-qa.mjs` and
+related headless checks). It is not included in the compiled game bundle.

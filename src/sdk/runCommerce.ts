@@ -12,7 +12,7 @@
  */
 import RundotGameAPI from "@series-inc/rundot-game-sdk/api";
 import type { ShopOrderHistoryResponse, ShopPurchaseResponse, StorefrontItem } from "@series-inc/rundot-game-sdk";
-import { getRunCapabilities, withTimeout } from "./runSdk.ts";
+import { getRunCapabilities, withHostOverlay, withTimeout } from "./runSdk.ts";
 
 function namespace(name: string): boolean {
     return typeof (RundotGameAPI as unknown as Record<string, unknown>)[name] === "object";
@@ -52,6 +52,51 @@ export async function getEntitlementQuantity(entitlementId: string): Promise<num
     }
 }
 
+/**
+ * Spend from a consumable entitlement.
+ *
+ * Returns the balance the server reports afterwards, or `null` when the host
+ * could not be reached. `null` is not "it worked" and not "it failed" — the
+ * caller must not hand out the thing that was paid for, and must not decrement
+ * anything locally either.
+ *
+ * A referenceId is captured from the first attempt and reused on the retry, so
+ * a failure between the consume and the grant cannot charge the player twice.
+ */
+export async function consumeEntitlement(
+    entitlementId: string,
+    quantity: number,
+    reason: string,
+): Promise<number | null> {
+    if (!hasEntitlements()) return null;
+    let referenceId: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const entitlement = await withTimeout(
+                RundotGameAPI.entitlements.consumeEntitlement(
+                    entitlementId,
+                    quantity,
+                    (_result, reference) => {
+                        referenceId = reference;
+                    },
+                    reason,
+                    referenceId,
+                ),
+                6_000,
+                "entitlements.consumeEntitlement",
+            );
+            const left = (entitlement as { quantity?: unknown } | null)?.quantity;
+            return typeof left === "number" && Number.isFinite(left) ? left : 0;
+        } catch (error) {
+            if (attempt === 1 || referenceId === undefined) {
+                console.warn("[commerce] entitlement consume failed", error);
+                return null;
+            }
+        }
+    }
+    return null;
+}
+
 /** Live catalog entry, used so the shop shows the real price and never a guess. */
 export async function getShopItem(itemId: string): Promise<StorefrontItem | null> {
     if (!hasShop()) return null;
@@ -69,7 +114,7 @@ export const shopPort = {
         if (!hasShop()) throw new PurchaseUnavailableError();
         // A checkout is user-mediated and may legitimately take a long time.
         // Bounding it too tightly turns a completed order into an "unknown".
-        return RundotGameAPI.shop.purchase(itemId, idempotencyKey);
+        return withHostOverlay(() => RundotGameAPI.shop.purchase(itemId, idempotencyKey));
     },
     async getOrderHistory(): Promise<ShopOrderHistoryResponse> {
         if (!hasShop()) throw new PurchaseUnavailableError();

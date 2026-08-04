@@ -27,6 +27,9 @@ import { BufferImageSource, Texture } from "pixi.js";
 import type { InkSim } from "../sim/inkSim.ts";
 import {
     ASH,
+    ACID,
+    AMALGAM,
+    AMBER,
     BASALT,
     BLOSSOM,
     BRIAR,
@@ -35,6 +38,9 @@ import {
     EMBER,
     EMPTY,
     FROST,
+    FUME,
+    FULGURITE,
+    GUST,
     GLASS,
     GRIT,
     HAZE,
@@ -42,11 +48,21 @@ import {
     MOTE,
     PITCH,
     RILL,
+    MAGMA,
+    MOLTEN,
+    MOSS,
+    OBSIDIAN,
+    PEAT,
+    QUICK,
+    RESIN,
     RIME,
     SALT,
+    SEALED,
     SILT,
     SMOKE,
     SPORE,
+    VOLT,
+    WAX,
     STEAM,
 } from "../sim/elements.ts";
 
@@ -63,11 +79,39 @@ import {
  */
 const BLEED_RADIUS = 3;
 
+/**
+ * Glow halo radius, in cells.
+ *
+ * Wider than the bleed would look like fog off every spark; narrower stops
+ * reading as light and goes back to being a coloured pixel.
+ */
+const GLOW_RADIUS = 2;
+
 export interface SimTexture {
     /** The mark itself. */
     readonly mark: Texture;
     /** The wet halo drawn underneath it. */
     readonly bleed: Texture;
+    /**
+     * The light the page gives back.
+     *
+     * Everything else here multiplies into the paper, which means fire, magma,
+     * a charge and a mote can only ever *darken* the sheet — a wildfire reads
+     * as brown dots. This plate is drawn additively on top, so the hot
+     * elements actually glow. On high quality the core is blurred into a halo;
+     * on low it is the bare core, which still reads as light.
+     */
+    readonly glow: Texture;
+    /**
+     * Live views of the mark and glow cell buffers, premultiplied RGBA.
+     *
+     * Read-only by contract: the folio capture composites them onto a 2D
+     * canvas at tear time, which keeps the capture renderer-independent — a
+     * WebGPU readback is async and a WebGL one needs `preserveDrawingBuffer`,
+     * and neither is worth it for pixels that already live on the CPU.
+     */
+    readonly markPixels: Uint8Array;
+    readonly glowPixels: Uint8Array;
     /** Repaint from the simulation and push new pixels to the GPU. */
     update(sim: InkSim, withBleed: boolean): void;
     destroy(): void;
@@ -79,6 +123,9 @@ export function createSimTexture(width: number, height: number): SimTexture {
     const markWords = new Uint32Array(markPixels.buffer);
     const bleedPixels = new Uint8Array(cells * 4);
     const scratch = new Uint8Array(cells * 4);
+    const glowCore = new Uint8Array(cells * 4);
+    const glowCoreWords = new Uint32Array(glowCore.buffer);
+    const glowPixels = new Uint8Array(cells * 4);
 
     const makeSource = (resource: Uint8Array) => {
         const source = new BufferImageSource({
@@ -98,15 +145,47 @@ export function createSimTexture(width: number, height: number): SimTexture {
 
     const markSource = makeSource(markPixels);
     const bleedSource = makeSource(bleedPixels);
+    const glowSource = makeSource(glowPixels);
     const mark = new Texture({ source: markSource });
     const bleed = new Texture({ source: bleedSource });
+    const glow = new Texture({ source: glowSource });
+
+    // Skip the glow passes entirely while the page holds nothing hot — which
+    // is most of the time — but always clear and upload once on the way down,
+    // or the last frame of a fire stays burned into the plate.
+    let hadGlow = false;
 
     return {
         mark,
         bleed,
+        glow,
+        markPixels,
+        glowPixels,
         update(sim, withBleed) {
             paint(sim, markWords, width, height);
             markSource.update();
+
+            const lit = paintGlow(sim, glowCoreWords, width, height);
+            if (lit > 0) {
+                if (withBleed) {
+                    // Halo pass: the blurred core is the light spilling onto
+                    // the paper, and the core folded back in is the hot centre.
+                    blur(glowCore, glowPixels, scratch, width, height, GLOW_RADIUS);
+                    for (let i = 0; i < glowPixels.length; i++) {
+                        const sum = (glowPixels[i] ?? 0) + (glowCore[i] ?? 0);
+                        glowPixels[i] = sum > 255 ? 255 : sum;
+                    }
+                } else {
+                    glowPixels.set(glowCore);
+                }
+                glowSource.update();
+                hadGlow = true;
+            } else if (hadGlow) {
+                glowPixels.fill(0);
+                glowSource.update();
+                hadGlow = false;
+            }
+
             if (!withBleed) return;
             blur(markPixels, bleedPixels, scratch, width, height, BLEED_RADIUS);
             bleedSource.update();
@@ -114,6 +193,7 @@ export function createSimTexture(width: number, height: number): SimTexture {
         destroy() {
             mark.destroy(true);
             bleed.destroy(true);
+            glow.destroy(true);
         },
     };
 }
@@ -194,6 +274,77 @@ function blur(
             destination[out + 3] = (a / window) | 0;
         }
     }
+}
+
+/**
+ * Write the emissive core: every cell that is a light source right now.
+ *
+ * Colours are packed premultiplied with the intensity in the alpha channel, so
+ * under an `add` blend the contribution *is* `colour × intensity` — no shader
+ * work needed. Flicker phases reuse `grain + tick × prime`, the same idiom the
+ * mark uses, so the two plates shimmer in sympathy rather than beating against
+ * each other. Returns how many cells were lit so the caller can skip the halo
+ * pass on a cold page.
+ */
+function paintGlow(sim: InkSim, words: Uint32Array, width: number, height: number): number {
+    const { cells, life, burn, grain, tick } = sim;
+    let lit = 0;
+
+    for (let i = 0, count = width * height; i < count; i++) {
+        const element = cells[i] ?? EMPTY;
+        const g = grain[i] ?? 0;
+
+        if ((burn[i] ?? 0) > 0) {
+            // Open flame: the brightest thing on the page, and never steady.
+            const flicker = (g + tick * 7) & 31;
+            words[i] = pack(255, 186, 96, flicker < 14 ? 190 : 140);
+            lit++;
+            continue;
+        }
+
+        switch (element) {
+            case EMBER: {
+                const pulse = (g + tick * 5) & 31;
+                words[i] = pack(255, 158, 64, pulse < 12 ? 150 : 105);
+                lit++;
+                continue;
+            }
+            case MAGMA: {
+                // `life` is the cooling counter: brand-new magma floods light,
+                // crusting magma barely leaks it through the cracks.
+                const cooling = life[i] ?? 0;
+                const intensity = cooling > 150 ? 55 : cooling > 110 ? 115 : 175;
+                words[i] = pack(255, 128, 44, intensity);
+                lit++;
+                continue;
+            }
+            case MOLTEN: {
+                // Faint while it runs hot, nothing once it is merely warm.
+                if ((life[i] ?? 0) > 120) break;
+                words[i] = pack(255, 196, 96, 60);
+                lit++;
+                continue;
+            }
+            case VOLT: {
+                const flash = ((g + tick * 7) & 15) < 6;
+                words[i] = pack(196, 232, 255, flash ? 235 : 130);
+                lit++;
+                continue;
+            }
+            case MOTE: {
+                const fade = (life[i] ?? 0) * 2;
+                words[i] = pack(255, 222, 148, fade > 96 ? 96 : fade);
+                lit++;
+                continue;
+            }
+            default:
+                break;
+        }
+
+        words[i] = 0;
+    }
+
+    return lit;
 }
 
 function paint(sim: InkSim, words: Uint32Array, width: number, height: number): void {
@@ -379,6 +530,136 @@ function paint(sim: InkSim, words: Uint32Array, width: number, height: number): 
                         gg = 100;
                         b = 89;
                         a = 225;
+                        break;
+                    case WAX:
+                        r = g < 30 ? 224 : 206;
+                        gg = g < 30 ? 200 : 182;
+                        b = g < 30 ? 138 : 120;
+                        a = 236;
+                        break;
+                    case MOLTEN: {
+                        // Hot when it starts running, dull as it sets. `life`
+                        // is the cooling counter, so the colour is the state.
+                        const cool = (life[i] ?? 0) > 120;
+                        r = cool ? 226 : 244;
+                        gg = cool ? 168 : 182;
+                        b = cool ? 84 : 62;
+                        a = 232;
+                        break;
+                    }
+                    case SEALED:
+                        r = g < 30 ? 214 : 196;
+                        gg = g < 30 ? 176 : 158;
+                        b = g < 30 ? 110 : 96;
+                        a = 244;
+                        break;
+                    case MOSS: {
+                        // Older patches are darker, so a bed reads as having
+                        // grown outward rather than having been painted flat.
+                        const old = (life[i] ?? 0) > 6;
+                        r = old ? 74 : 96;
+                        gg = old ? 132 : 158;
+                        b = old ? 44 : 52;
+                        a = 228;
+                        break;
+                    }
+                    case PEAT:
+                        r = g < 30 ? 86 : 70;
+                        gg = g < 30 ? 60 : 48;
+                        b = g < 30 ? 36 : 28;
+                        a = 246;
+                        break;
+                    case ACID: {
+                        const submerged = y > 0 && (cells[i - width] ?? EMPTY) === ACID;
+                        r = submerged ? 138 : 160;
+                        gg = submerged ? 186 : 208;
+                        b = submerged ? 30 : 40;
+                        a = submerged ? 200 : 168;
+                        break;
+                    }
+                    case FUME: {
+                        r = 176;
+                        gg = 196;
+                        b = 74;
+                        const fade = (life[i] ?? 0) * 2;
+                        a = fade > 92 ? 92 : fade;
+                        break;
+                    }
+                    case QUICK: {
+                        // A bright specular band that walks with the tick, so a
+                        // bead of quicksilver reads as metal and not as grey.
+                        const sheen = ((g + tick * 3) & 31) < 8;
+                        r = sheen ? 236 : 150;
+                        gg = sheen ? 242 : 160;
+                        b = sheen ? 250 : 178;
+                        a = 246;
+                        break;
+                    }
+                    case VOLT: {
+                        // Flickers hard between white-hot and its own blue, so
+                        // a charge never reads as a static dot of pigment.
+                        const flash = ((g + tick * 7) & 15) < 6;
+                        r = flash ? 252 : 128;
+                        gg = flash ? 253 : 214;
+                        b = 255;
+                        a = 250;
+                        break;
+                    }
+                    case MAGMA: {
+                        // Cools visibly: `life` is the cooling counter, so the
+                        // colour tells the player how long it has left.
+                        const cooling = life[i] ?? 0;
+                        const crust = cooling > 150 && ((g + cooling) & 7) < 3;
+                        r = crust ? 122 : cooling > 110 ? 226 : 250;
+                        gg = crust ? 74 : cooling > 110 ? 96 : 148;
+                        b = crust ? 56 : cooling > 110 ? 34 : 40;
+                        a = 246;
+                        break;
+                    }
+                    case RESIN: {
+                        // Darkens as it thickens.
+                        const thick = (life[i] ?? 0) > 120;
+                        r = thick ? 198 : 224;
+                        gg = thick ? 130 : 158;
+                        b = thick ? 34 : 50;
+                        a = thick ? 236 : 206;
+                        break;
+                    }
+                    case AMBER:
+                        r = g < 30 ? 226 : 200;
+                        gg = g < 30 ? 158 : 132;
+                        b = g < 30 ? 52 : 38;
+                        a = 240;
+                        break;
+                    case GUST: {
+                        // Barely there. A gust is legible from what it moves,
+                        // not from itself, and a solid mark would read as fog.
+                        r = 224;
+                        gg = 240;
+                        b = 244;
+                        const fade = life[i] ?? 0;
+                        a = fade > 56 ? 56 : fade;
+                        break;
+                    }
+                    case OBSIDIAN: {
+                        const facet = ((g >> 2) & 7) < 2;
+                        r = facet ? 74 : 34;
+                        gg = facet ? 62 : 28;
+                        b = facet ? 92 : 44;
+                        a = 250;
+                        break;
+                    }
+                    case FULGURITE:
+                        r = g < 30 ? 214 : 186;
+                        gg = g < 30 ? 206 : 178;
+                        b = g < 30 ? 232 : 206;
+                        a = 240;
+                        break;
+                    case AMALGAM:
+                        r = g < 30 ? 196 : 172;
+                        gg = g < 30 ? 204 : 180;
+                        b = g < 30 ? 218 : 194;
+                        a = 248;
                         break;
                     default:
                         r = 42;

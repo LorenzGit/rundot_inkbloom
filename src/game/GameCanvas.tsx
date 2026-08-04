@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import type { Application } from "pixi.js";
 import { createPixiApp } from "./pixiApp.ts";
 import { createStage, type Stage } from "./stage.ts";
+import { inkAudio } from "../audio/inkAudio.ts";
 import { createPageScene, type Scene } from "./scene/pageScene.ts";
 import { store, useStore } from "../state/store.ts";
 
@@ -53,6 +54,10 @@ export default function GameCanvas() {
         if (!host) return;
 
         const teardown = (): void => {
+            // Also done in the scene's own destroy. Repeated here because this
+            // path also runs when the scene never got built, and because the
+            // one thing that must not survive a teardown is a sound.
+            inkAudio.silencePage();
             removeWatchdog?.();
             removeWatchdog = null;
             if (watchdog) window.clearTimeout(watchdog);

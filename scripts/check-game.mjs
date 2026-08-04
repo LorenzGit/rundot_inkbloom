@@ -79,7 +79,7 @@ expect(
 
 const discoveries = read("src/game/sim/discoveries.ts");
 const ids = [...discoveries.matchAll(/^\s+id:\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-expect(ids.length === 20, `expected 20 discoveries, found ${ids.length}`);
+expect(ids.length === 60, `expected 60 discoveries, found ${ids.length}`);
 expect(new Set(ids).size === ids.length, "discovery ids must be unique");
 for (const id of ids) {
     expect(
@@ -111,14 +111,38 @@ const platform = read("src/config/platform.ts");
 expect(/REPLACE_WITH_RUN_GAME_ID/.test(platform), "gameId placeholder must survive until `rundot init` runs");
 expect(/inkbloom_illuminators_kit/.test(platform), "the Kit product id must be self-authored and stable");
 
+expect(/inkbloom_pot_of_ink/.test(platform), "the pot product id must be self-authored and stable");
+expect(/inkbloom_borrow_ink_rewarded/.test(platform), "the borrow placement id must be self-authored and stable");
+
+// Looked up by id, never by position. This used to read `items[0]` and broke
+// the moment a second product sorted above the Kit.
 const shopConfig = JSON.parse(read("rundot/shop.config.json"));
-const kit = shopConfig.items?.[0];
-expect(kit?.itemId === "inkbloom_illuminators_kit", "shop config must define the Kit");
+const shopItem = (id) => shopConfig.items?.find((entry) => entry.itemId === id);
+
+const kit = shopItem("inkbloom_illuminators_kit");
+expect(kit !== undefined, "shop config must define the Kit");
 expect(
     kit?.entitlements?.[0]?.entitlementId === "inkbloom_illuminators_kit" && kit.entitlements[0].consumable === false,
     "the Kit must grant a non-consumable entitlement matching platform.ts",
 );
 expect(kit?.unique === true, "the Kit is a one-time purchase and must be unique");
+
+const pot = shopItem("inkbloom_pot_of_ink");
+expect(pot !== undefined, "shop config must define the Pot of Ink");
+expect(
+    pot?.entitlements?.[0]?.entitlementId === "inkbloom_nudges" && pot.entitlements[0].consumable === true,
+    "the pot must grant a consumable nudge entitlement matching platform.ts",
+);
+expect(pot?.unique === false, "a pot is repeatable — a second one adds to the same balance");
+const potQuantity = Number(pot?.entitlements?.[0]?.quantity);
+expect(
+    potQuantity === Number(/POT_NUDGE_QUANTITY = (\d+)/.exec(read("src/systems/monetizationConfig.ts"))?.[1]),
+    "the pot's catalog quantity must match POT_NUDGE_QUANTITY",
+);
+for (const item of shopConfig.items ?? []) {
+    expect(item.price?.type === "bucks", `${item.itemId} must be priced in Run Bits`);
+    expect(Number(item.price?.value) > 0, `${item.itemId} must carry a real launch price, not a QA value`);
+}
 
 const liveOps = JSON.parse(read("rundot/liveops.config.json"));
 const monetizationConfig = liveOps.client?.values?.inkbloom_monetization;
@@ -126,6 +150,23 @@ expect(monetizationConfig?.interstitialAdsEnabled === false, "this game ships no
 expect(
     monetizationConfig?.placements?.margin_nudge?.dailyCap === 3,
     "the rewarded nudge daily cap must match the shipped design",
+);
+// Flags that do not ship leave the surface dark even with real ids, which is
+// how a game launches with monetization unintentionally off.
+expect(monetizationConfig?.placements?.borrow_ink?.enabled === true, "the borrow placement must ship enabled");
+expect(monetizationConfig?.products?.pot_of_ink?.enabled === true, "the pot product must ship enabled");
+
+expect(
+    /const left = await consumeEntitlement/.test(monetization),
+    "a bought nudge must be spent through the server, never decremented locally",
+);
+expect(
+    /if \(left === null\) return "unavailable";/.test(monetization),
+    "an unreachable host must not spend a pot nudge",
+);
+expect(
+    /const spent = await spendPotNudge\(\);/.test(read("src/systems/hints.ts")),
+    "a pot nudge must be charged before the note is revealed",
 );
 
 // --------------------------------------------------------------- presentation

@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <!-- Locked viewport: RUN games are fullscreen mobile apps; never let the page zoom or scroll. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Locked viewport: RUN games are fullscreen mobile apps; never let the page zoom or scroll.
+         viewport-fit=cover lets the page draw behind the notch / Dynamic Island, which is also what
+         makes env(safe-area-inset-*) report real values instead of zeros. Without it, the HUD
+         (progress chip, title chrome) sits under the system status bar on iOS. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Inkbloom — paint inks that live</title>
     <style>
         /* Boot cover: inlined (not in the bundle's CSS) so the screen is black

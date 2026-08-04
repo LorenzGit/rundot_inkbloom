@@ -20,7 +20,7 @@ export interface Celebration {
     title: string;
     note: string;
     colour: number;
-    /** `n/20` for discoveries. */
+    /** `n/60` for discoveries. */
     ordinal: number | null;
     /** Simulation cell to burst particles from, when there is one. */
     cell: number | null;
@@ -37,7 +37,12 @@ export function takeCelebrations(): Celebration[] {
 export function isInkUnlocked(slot: number, discoveryCount: number): boolean {
     if (slot === ERASER_INDEX) return true;
     const ink = INKS[slot];
-    return ink !== undefined && discoveryCount >= ink.unlockAt;
+    if (ink === undefined) return false;
+    // A borrowed bottle is usable but not earned: `discoveryCount` is what
+    // gates the shelf, and the loan is checked separately so nothing else in
+    // the game mistakes it for progress.
+    if (store.get().borrowedInk === slot) return true;
+    return discoveryCount >= ink.unlockAt;
 }
 
 /** The next bottle still to come, for the shelf's "coming up" affordance. */
@@ -78,7 +83,10 @@ export function recordDiscovery(index: number, cell: number | null): void {
         ordinal: count,
         cell,
     });
-    inkAudio.play("discovery");
+    // Each find strikes a different degree of the same pentatonic key, and
+    // the sixtieth lands a full octave up — the journey has a melody.
+    const degrees = [0, 2, 4, 7, 9];
+    inkAudio.play("discovery", { lift: count === DISCOVERY_COUNT ? 12 : (degrees[(count - 1) % 5] ?? 0) });
     void runtimeServices.haptic("success");
     runtimeServices.track("discovery_found", {
         discovery_id: discovery.id,
@@ -102,6 +110,13 @@ export function recordDiscovery(index: number, cell: number | null): void {
             cell: null,
         });
         runtimeServices.track("ink_unlocked", { ink_id: ink.id, at: count });
+    }
+
+    // The sixtieth find summons the colophon — once, ever. The overlay itself
+    // waits out the toast so the "№ 60" card gets its moment first.
+    if (count === DISCOVERY_COUNT && !state.colophonSeen) {
+        store.patch({ colophonPending: true });
+        runtimeServices.track("colophon_reached", { pages_torn: state.pagesTorn, strokes: state.strokes });
     }
 
     void submitDiscoveryScore(count);

@@ -26,7 +26,33 @@ export interface AudioDebugSnapshot {
     activeVoices: number;
     suppressedCues: number;
     pageVoiceGain: number;
+    /** True once the page has been silenced and nothing continuous is running. */
+    pageSilent: boolean;
 }
+
+/**
+ * How many synthesised voices may sound at once.
+ *
+ * There was no cap, and a burning page under a moving finger is a stream of
+ * crackles, a stream of stroke noise and a run of discovery chimes all at the
+ * same time. Thirty overlapping noise bursts do not sound like a big fire —
+ * they sound like static, and the limiter can only flatten the result, not
+ * separate it. Past the cap a voice is dropped rather than queued: a sound
+ * that arrives late is worse than one that never arrives.
+ */
+const MAX_VOICES = 14;
+
+/**
+ * The floor on the gap between fire crackles.
+ *
+ * Intensity is carried by how loud and how low each crackle is, not by how
+ * many of them there are. Rate alone converges on white noise: past roughly
+ * twenty a second the ear stops hearing events and starts hearing hiss.
+ */
+const MIN_CRACKLE_GAP_MS = 55;
+
+/** One rate limit for every continuous stroke sound, so none can be forgotten. */
+const STROKE_GAP_MS = 70;
 
 /**
  * A slow modal figure in D dorian. It is deliberately sparse: three or four
@@ -56,14 +82,22 @@ const FIGURE: readonly (number | null)[] = [
 ];
 const SCALE = [293.66, 329.63, 392.0, 440.0, 587.33] as const;
 
+/**
+ * Minimum gap between two of the same cue.
+ *
+ * `discovery` is the long one and it is deliberately longer than it looks like
+ * it needs to be: the chime is three tones with tails up to 0.86s, and a
+ * wildfire can turn over half a dozen secrets in a second. At the old 220ms
+ * four chime stacks overlapped into a chord nobody wrote.
+ */
 const CUE_COOLDOWN_MS: Record<SfxCue, number> = {
     tap: 45,
     select: 40,
     deny: 180,
-    discovery: 220,
+    discovery: 400,
     unlock: 300,
     tear: 260,
-    reward: 260,
+    reward: 320,
     error: 220,
 };
 
@@ -80,14 +114,34 @@ class InkAudio {
     private nextAmbientTime = 0;
 
     private voices = new Set<AudioScheduledSourceNode>();
+    /**
+     * The subset of voices the *page* is making.
+     *
+     * Tracked separately so leaving the sheet can cut them without touching the
+     * ambient bed or a menu tap that is still ringing — the music is supposed
+     * to follow the player out to the title screen.
+     */
+    private pageVoices = new Set<AudioScheduledSourceNode>();
     private lastCueAt = new Map<SfxCue, number>();
-    private lastScratchAt = 0;
+    private lastStrokeAt = 0;
     private lastCrackleAt = 0;
     private suppressedCues = 0;
 
+    /**
+     * True while the page is torn down — between leaving the sheet and opening
+     * it again.
+     *
+     * The page voice is a *permanent* looping source gated only by a bus gain,
+     * so nothing about destroying the Pixi scene stopped it: the bed kept
+     * droning at whatever level the page was at when the player left, all the
+     * way through the main menu. Continuous page sound is gated on this rather
+     * than on any caller remembering to wind it down.
+     */
+    private pageSilent = true;
+
     private paused = false;
     private hostPaused = false;
-    private adVisible = false;
+    private hostOverlayVisible = false;
     private pageHidden = document.visibilityState !== "visible";
     private bound = false;
     private pageVoiceTarget = 0;
@@ -106,7 +160,15 @@ class InkAudio {
         try {
             this.ensureGraph();
             if (!this.context || this.paused) return false;
-            if (this.context.state === "suspended") await this.context.resume();
+            if (this.context.state === "suspended") {
+                // WebKit leaves resume() pending FOREVER when the call is not
+                // backed by recognized user activation. Never let that hang a
+                // caller — UI actions may await unlock before proceeding.
+                await Promise.race([
+                    this.context.resume(),
+                    new Promise<void>((resolve) => window.setTimeout(resolve, 300)),
+                ]);
+            }
             this.sync();
             return this.context.state === "running";
         } catch (error) {
@@ -120,18 +182,21 @@ class InkAudio {
         this.applyPauseState();
     }
 
-    /**
-     * Ads do not reliably emit host lifecycle events, so their interruption is
-     * tracked separately and never written to the player's saved settings.
-     */
-    setAdVisible(visible: boolean): void {
-        this.adVisible = visible;
+    /** Host-owned ads and checkout sheets are independent of lifecycle pause. */
+    setHostOverlayVisible(visible: boolean): void {
+        this.hostOverlayVisible = visible;
         this.applyPauseState();
     }
 
     // ------------------------------------------------------------- one-shots
 
-    play(cue: SfxCue): void {
+    /**
+     * `options.lift` transposes the cue by that many semitones. Only the
+     * discovery chime uses it: each find strikes a different degree of the
+     * same key, so a session of discoveries plays a slow melody instead of
+     * the same stamp sixty times.
+     */
+    play(cue: SfxCue, options?: { lift?: number }): void {
         const state = store.get();
         if (!this.context || !this.cueBus || this.paused || !state.sfxEnabled || state.sfxVolume <= 0) return;
         const now = performance.now();
@@ -141,6 +206,7 @@ class InkAudio {
         }
         this.lastCueAt.set(cue, now);
         const at = this.context.currentTime;
+        const ratio = 2 ** ((options?.lift ?? 0) / 12);
 
         switch (cue) {
             case "tap":
@@ -155,9 +221,9 @@ class InkAudio {
                 break;
             case "discovery":
                 // A gilt star pressed into the page: struck, then two overtones.
-                this.tone(659.25, 0.72, 0.1, "sine", at, this.cueBus);
-                this.tone(987.77, 0.86, 0.055, "sine", at + 0.09, this.cueBus);
-                this.tone(1_318.5, 0.52, 0.02, "triangle", at + 0.1, this.cueBus);
+                this.tone(659.25 * ratio, 0.72, 0.1, "sine", at, this.cueBus);
+                this.tone(987.77 * ratio, 0.86, 0.055, "sine", at + 0.09, this.cueBus);
+                this.tone(1_318.5 * ratio, 0.52, 0.02, "triangle", at + 0.1, this.cueBus);
                 break;
             case "unlock":
                 this.tone(523.25, 0.4, 0.075, "sine", at, this.cueBus);
@@ -180,32 +246,45 @@ class InkAudio {
     }
 
     /**
-     * The nib on paper. Called from the paint loop with how far the stroke
-     * travelled, and rate-limited hard — a continuous drag must sound like one
-     * continuous scrape, not a machine gun of grains.
+     * The sound of a stroke being drawn: the nib on paper, or an ember fizzing.
+     *
+     * Both go through one entry point on purpose. They were separate methods,
+     * `scratch` was rate-limited and `fizz` was not, and pointermove fires at
+     * 60-120Hz — so painting with ember was a machine gun of noise bursts while
+     * painting with anything else was a scrape. Sharing the limiter is the only
+     * way a future third stroke sound cannot repeat that.
      */
-    scratch(distance: number): void {
+    stroke(kind: "nib" | "fizz", distance: number): void {
         const state = store.get();
-        if (!this.context || this.paused || !state.sfxEnabled || state.sfxVolume <= 0) return;
+        if (!this.context || this.paused || this.pageSilent) return;
+        if (!state.sfxEnabled || state.sfxVolume <= 0) return;
         const now = performance.now();
-        if (now - this.lastScratchAt < 70) return;
-        this.lastScratchAt = now;
+        if (now - this.lastStrokeAt < STROKE_GAP_MS) return;
+        this.lastStrokeAt = now;
         const spread = this.jitter();
+        const at = this.context.currentTime;
+        if (kind === "fizz") {
+            // An ember landing on paper: a short bright crack that falls away,
+            // not a 140ms wash of top end.
+            this.burst(0.055, 2_600 + spread * 500, 5, 0.03, 1, at, "page", 900);
+            if (this.cueBus) this.tone(180 + spread * 40, 0.06, 0.02, "triangle", at, this.cueBus, 900);
+            return;
+        }
+        // A nib catches paper fibre by fibre. Each catch is a short resonant
+        // tick at its own pitch — which is why the centre frequency moves per
+        // stroke — and the run of them reads as a scrape. The old version was a
+        // 90ms band at Q 0.7, which is to say ninety milliseconds of hiss,
+        // repeated every seventy.
         this.burst(
-            0.09,
-            800 + spread * 700,
-            0.7,
-            Math.min(0.05, 0.015 + distance * 0.002),
-            0.7 + spread * 0.5,
-            this.context.currentTime,
+            0.032,
+            620 + spread * 900,
+            8,
+            Math.min(0.045, 0.016 + distance * 0.002),
+            0.8 + spread * 0.4,
+            at,
+            "page",
+            420 + spread * 260,
         );
-    }
-
-    /** Ember hitting the page — a fizz rather than a scrape. */
-    fizz(): void {
-        const state = store.get();
-        if (!this.context || this.paused || !state.sfxEnabled || state.sfxVolume <= 0) return;
-        this.burst(0.14, 2_200 + this.jitter() * 600, 1.2, 0.028, 1, this.context.currentTime);
     }
 
     /**
@@ -214,13 +293,32 @@ class InkAudio {
      */
     setFireDensity(burningCells: number): void {
         const state = store.get();
-        if (!this.context || this.paused || !state.sfxEnabled || state.sfxVolume <= 0) return;
+        if (!this.context || this.paused || this.pageSilent) return;
+        if (!state.sfxEnabled || state.sfxVolume <= 0) return;
         if (burningCells <= 0) return;
         const now = performance.now();
-        const interval = Math.max(28, 240 - burningCells * 1.6);
+        const interval = Math.max(MIN_CRACKLE_GAP_MS, 240 - burningCells * 1.6);
         if (now - this.lastCrackleAt < interval) return;
         this.lastCrackleAt = now;
-        this.burst(0.035, 350 + this.jitter() * 400, 2.5, 0.03, 1, this.context.currentTime);
+        // Past the rate floor, a bigger fire gets *bigger crackles* rather than
+        // more of them: longer, louder, and lower. More events per second is
+        // how a fire turns into hiss.
+        // A crackle is an impulse: a resin pocket letting go. Short, resonant,
+        // and pitched — never a band of noise held open, which is what a long
+        // low-Q burst is. Size raises the level and drops the pitch; it does
+        // not lengthen the sound, because a longer noise burst is just hiss.
+        const size = Math.min(1, burningCells / 220);
+        const spread = this.jitter();
+        this.burst(
+            0.02 + size * 0.014,
+            520 - size * 180 + spread * 420,
+            9,
+            0.028 + size * 0.026,
+            1,
+            this.context.currentTime,
+            "page",
+            180 + spread * 120,
+        );
     }
 
     /**
@@ -228,10 +326,56 @@ class InkAudio {
      * has presence without any explicit cue.
      */
     setPageActivity(activity: number): void {
-        this.pageVoiceTarget = Math.max(0, Math.min(1, activity));
+        this.pageVoiceTarget = this.pageSilent ? 0 : Math.max(0, Math.min(1, activity));
         if (!this.context || !this.pageBus) return;
-        const target = this.paused ? 0 : this.pageVoiceTarget * 0.1;
+        const target = this.paused ? 0 : this.pageVoiceTarget * 0.05;
         this.pageBus.gain.setTargetAtTime(target, this.context.currentTime, 0.35);
+    }
+
+    /**
+     * The sheet is open. Continuous page sound is allowed again.
+     */
+    openPage(): void {
+        this.pageSilent = false;
+    }
+
+    /**
+     * The sheet is gone — torn down, or the player went back to the menu.
+     *
+     * Winds the page voice down, stops every scheduled one-shot, and latches
+     * `pageSilent` so a late call from a dying frame cannot start it again.
+     * Menus keep their own taps and the ambient bed; what stops is everything
+     * the *page* was making.
+     */
+    silencePage(): void {
+        this.pageSilent = true;
+        this.pageVoiceTarget = 0;
+        this.lastCrackleAt = 0;
+        this.lastStrokeAt = 0;
+        if (!this.context) return;
+        this.pageBus?.gain.setTargetAtTime(0, this.context.currentTime, 0.08);
+        this.stopVoices();
+    }
+
+    /**
+     * Attach an analyser to the master output and report what the game
+     * actually sounds like.
+     *
+     * **Spectral flatness** is the number that matters: it is the geometric
+     * mean of the power spectrum over its arithmetic mean, so 1.0 is white
+     * noise and values near 0 are tonal. "It sounds like noise" is not a
+     * matter of taste — it is a flatness measurement, and it is the only way to
+     * tell whether a change to the synthesis actually helped.
+     *
+     * Development only, and read-only: it taps the graph and changes nothing.
+     */
+    debugAttachAnalyser(): AnalyserNode | null {
+        if (!import.meta.env.DEV || !this.context || !this.master) return null;
+        const analyser = this.context.createAnalyser();
+        analyser.fftSize = 2_048;
+        analyser.smoothingTimeConstant = 0;
+        this.master.connect(analyser);
+        return analyser;
     }
 
     debugSnapshot(): AudioDebugSnapshot {
@@ -242,6 +386,7 @@ class InkAudio {
             activeVoices: this.voices.size,
             suppressedCues: this.suppressedCues,
             pageVoiceGain: this.pageVoiceTarget,
+            pageSilent: this.pageSilent,
         };
     }
 
@@ -254,7 +399,7 @@ class InkAudio {
     private noiseSource = new NoiseRandom(0x0bad_c0de, 0);
 
     private applyPauseState(): void {
-        this.paused = this.hostPaused || this.pageHidden || this.adVisible;
+        this.paused = this.hostPaused || this.pageHidden || this.hostOverlayVisible;
         if (!this.context) return;
         if (this.paused) {
             this.stopAmbient();
@@ -288,25 +433,92 @@ class InkAudio {
         this.ambientBus.connect(this.master);
         this.cueBus.connect(this.master);
 
-        // The page voice is filtered noise: the room tone of a wet sheet.
+        /*
+         * The page voice is the room tone of a working sheet.
+         *
+         * It was a *bandpass* at Q 0.6, which is barely a filter at all — the
+         * bed was effectively broadband noise held open whenever anything was
+         * on the page, and that is the single loudest reason the game sounded
+         * like static. A low lowpass turns the same source into a rumble the
+         * ear reads as presence rather than as hiss, and the level is halved.
+         */
         const pageFilter = this.context.createBiquadFilter();
-        pageFilter.type = "bandpass";
-        pageFilter.frequency.value = 520;
-        pageFilter.Q.value = 0.6;
+        pageFilter.type = "lowpass";
+        pageFilter.frequency.value = 260;
+        pageFilter.Q.value = 0.9;
         this.pageBus.connect(pageFilter).connect(this.master);
-        this.master.connect(limiter).connect(this.context.destination);
+
+        /*
+         * Tone shaping across everything, before the limiter.
+         *
+         * The highpass keeps stacked bursts from building mud at the bottom;
+         * the lowpass takes off the top octave, which is where noise stops
+         * being a texture and starts being a hiss. Per-sound fixes cannot do
+         * this job — it has to be the whole mix or the sounds stop matching.
+         */
+        const rumbleCut = this.context.createBiquadFilter();
+        rumbleCut.type = "highpass";
+        rumbleCut.frequency.value = 80;
+        rumbleCut.Q.value = 0.7;
+        const airCut = this.context.createBiquadFilter();
+        airCut.type = "lowpass";
+        airCut.frequency.value = 6_200;
+        airCut.Q.value = 0.6;
+
+        this.master.connect(rumbleCut).connect(airCut).connect(limiter).connect(this.context.destination);
 
         this.noise = this.createNoiseBuffer(this.context);
         this.startPageVoice();
     }
 
-    /** Deterministic noise, so the texture is identical on every device. */
+    /**
+     * Deterministic **pink** noise, so the texture is identical on every device.
+     *
+     * It was white, which is the harshest spectrum there is: equal power in
+     * every octave means most of the energy sits in the top two, and every
+     * sound built on it read as hiss. Pink falls at 3dB per octave, which is
+     * what paper, fire and rushing water actually do. This one change warms
+     * every burst in the game, because they all draw from this buffer.
+     *
+     * Paul Kellet's filter approximation — cheap, and accurate to about 0.05dB
+     * across the audible band.
+     */
     private createNoiseBuffer(context: AudioContext): AudioBuffer {
         const frames = Math.max(1, Math.round(context.sampleRate));
         const buffer = context.createBuffer(1, frames, context.sampleRate);
         const data = buffer.getChannelData(0);
         const random = new NoiseRandom(0x5ea1_1eaf, 0);
-        for (let i = 0; i < frames; i++) data[i] = random.nextDouble() * 2 - 1;
+        let b0 = 0;
+        let b1 = 0;
+        let b2 = 0;
+        let b3 = 0;
+        let b4 = 0;
+        let b5 = 0;
+        let b6 = 0;
+        for (let i = 0; i < frames; i++) {
+            const white = random.nextDouble() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.969 * b2 + white * 0.153852;
+            b3 = 0.8665 * b3 + white * 0.3104856;
+            b4 = 0.55 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.016898;
+            data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+            b6 = white * 0.115926;
+        }
+        // Normalised rather than scaled by a constant. The filter's output
+        // level is not the white input's, so a guessed constant silently
+        // re-gains every sound in the game — the first attempt at this made
+        // the whole mix roughly 12dB quieter and looked like a bug elsewhere.
+        let peak = 0;
+        for (let i = 0; i < frames; i++) {
+            const magnitude = Math.abs(data[i] ?? 0);
+            if (magnitude > peak) peak = magnitude;
+        }
+        if (peak > 0) {
+            const scale = 0.92 / peak;
+            for (let i = 0; i < frames; i++) data[i] = (data[i] ?? 0) * scale;
+        }
         return buffer;
     }
 
@@ -315,7 +527,7 @@ class InkAudio {
         const source = this.context.createBufferSource();
         source.buffer = this.noise;
         source.loop = true;
-        source.playbackRate.value = 0.22;
+        source.playbackRate.value = 0.18;
         source.connect(this.pageBus);
         source.start();
         // Intentionally never tracked for stop: this is the one permanent
@@ -384,7 +596,7 @@ class InkAudio {
         destination: GainNode,
         cutoff?: number,
     ): void {
-        if (!this.context) return;
+        if (!this.context || this.atVoiceLimit()) return;
         const oscillator = this.context.createOscillator();
         const envelope = this.context.createGain();
         oscillator.type = type;
@@ -411,26 +623,67 @@ class InkAudio {
         oscillator.stop(startAt + duration + 0.03);
     }
 
-    private burst(duration: number, frequency: number, q: number, peak: number, rate: number, startAt: number): void {
-        if (!this.context || !this.noise || !this.cueBus) return;
+    /**
+     * A filtered noise event.
+     *
+     * `endFrequency` sweeps the filter over the life of the burst. That sweep
+     * is most of the difference between a sound and a texture: a static band
+     * of noise is a hiss no matter how short it is, while the same noise with
+     * a falling filter is a fizz, a tick, or a pop. Every continuous sound in
+     * the game now sweeps.
+     */
+    private burst(
+        duration: number,
+        frequency: number,
+        q: number,
+        peak: number,
+        rate: number,
+        startAt: number,
+        owner: "cue" | "page" = "cue",
+        endFrequency?: number,
+    ): void {
+        if (!this.context || !this.noise || !this.cueBus || this.atVoiceLimit()) return;
         const source = this.context.createBufferSource();
         source.buffer = this.noise;
         source.loop = true;
         source.playbackRate.value = rate;
         const filter = this.context.createBiquadFilter();
         filter.type = "bandpass";
-        filter.frequency.value = frequency;
+        filter.frequency.setValueAtTime(frequency, startAt);
+        if (endFrequency !== undefined) {
+            filter.frequency.exponentialRampToValueAtTime(Math.max(40, endFrequency), startAt + duration);
+        }
         filter.Q.value = q;
         const envelope = this.context.createGain();
         envelope.gain.setValueAtTime(Math.max(0.0002, peak), startAt);
         envelope.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
         source.connect(filter).connect(envelope).connect(this.cueBus);
+        if (owner === "page") this.pageVoices.add(source);
         this.track(source, () => {
+            this.pageVoices.delete(source);
             filter.disconnect();
             envelope.disconnect();
         });
         source.start(startAt);
         source.stop(startAt + duration + 0.02);
+    }
+
+    /** True when there is no room left in the voice budget. */
+    private atVoiceLimit(): boolean {
+        if (this.voices.size < MAX_VOICES) return false;
+        this.suppressedCues += 1;
+        return true;
+    }
+
+    /** Cut every one-shot the page is making. */
+    private stopVoices(): void {
+        for (const voice of [...this.pageVoices]) {
+            try {
+                voice.stop();
+            } catch {
+                /* already stopped; the ended handler will clean it up */
+            }
+        }
     }
 
     private track(node: AudioScheduledSourceNode, cleanup: () => void): void {

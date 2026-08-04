@@ -38,10 +38,21 @@ export interface InkbloomSaveV1 {
         | "locale"
         | "quality"
     >;
-    progress: Pick<AppState, "discoveries" | "pagesTorn" | "strokes" | "selectedInk" | "largeBrush" | "mirrorBrush">;
+    progress: Pick<
+        AppState,
+        "discoveries" | "pagesTorn" | "strokes" | "selectedInk" | "largeBrush" | "mirrorBrush" | "colophonSeen"
+    >;
     hints: Pick<AppState, "revealedHints" | "hintDay" | "freeHintUsed" | "hintsWatchedToday">;
     prompt: Pick<AppState, "promptDay" | "promptId" | "promptSolved" | "promptLastKeptDay" | "promptStreak">;
-    commerce: Pick<AppState, "ownsKit" | "paper" | "kitOfferSeen"> & {
+    /**
+     * `potNudges` is a cache of the server's consumable balance, kept only so a
+     * cold boot can render a number before the host answers. It is overwritten
+     * by the first real entitlement read and is never spent from.
+     *
+     * A *borrowed* ink is deliberately absent: a loan that survived a reinstall
+     * would be an ink the player owns, which is not what was offered.
+     */
+    commerce: Pick<AppState, "ownsKit" | "paper" | "kitOfferSeen" | "potNudges" | "borrowDay" | "borrowsToday"> & {
         /** An order that was started but never confirmed, for resume on next boot. */
         pendingPurchase: PendingPurchaseIntent | null;
     };
@@ -142,6 +153,7 @@ function snapshot(): InkbloomSaveV1 {
             selectedInk: state.selectedInk,
             largeBrush: state.largeBrush,
             mirrorBrush: state.mirrorBrush,
+            colophonSeen: state.colophonSeen,
         },
         hints: {
             revealedHints: state.revealedHints,
@@ -160,6 +172,9 @@ function snapshot(): InkbloomSaveV1 {
             ownsKit: state.ownsKit,
             paper: state.paper,
             kitOfferSeen: state.kitOfferSeen,
+            potNudges: state.potNudges,
+            borrowDay: state.borrowDay,
+            borrowsToday: state.borrowsToday,
             pendingPurchase: cachedPendingPurchase,
         },
     };
@@ -209,6 +224,8 @@ function migrate(raw: unknown): InkbloomSaveV1 | null {
             largeBrush: booleanOr(progress.largeBrush, false),
             // A Kit-only tool cannot survive in a save that does not own the Kit.
             mirrorBrush: ownsKit && booleanOr(progress.mirrorBrush, false),
+            // The ceremony flag only means anything alongside a full journal.
+            colophonSeen: discoveries.length >= DISCOVERY_IDS.length && booleanOr(progress.colophonSeen, false),
         },
         hints: {
             revealedHints: knownIds(hints.revealedHints, DISCOVERY_IDS),
@@ -228,6 +245,9 @@ function migrate(raw: unknown): InkbloomSaveV1 | null {
             // A locked sheet in the save falls back to rag rather than granting it.
             paper: ownsKit || paper === "rag" ? paper : "rag",
             kitOfferSeen: booleanOr(commerce.kitOfferSeen, false),
+            potNudges: Math.min(9_999, counter(commerce.potNudges)),
+            borrowDay: dayKeyOrNull(commerce.borrowDay),
+            borrowsToday: Math.min(99, counter(commerce.borrowsToday)),
             pendingPurchase: pendingIntent(commerce.pendingPurchase),
         },
     };
@@ -252,6 +272,9 @@ function apply(save: InkbloomSaveV1): void {
         ownsKit: save.commerce.ownsKit,
         paper: save.commerce.paper,
         kitOfferSeen: save.commerce.kitOfferSeen,
+        potNudges: save.commerce.potNudges,
+        borrowDay: save.commerce.borrowDay,
+        borrowsToday: save.commerce.borrowsToday,
         discoveryCount: save.progress.discoveries.length,
     });
 }

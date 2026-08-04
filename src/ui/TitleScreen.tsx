@@ -1,13 +1,14 @@
 /**
  * The title.
  *
- * One screen, one obvious action. The hero is the game's own store tile —
- * rendered by the simulation, so the first thing a player sees is a real page
- * rather than an illustration of one.
+ * One screen, one obvious action. The hero is painted key art: three ink
+ * bottles on a shelf above a page where pigment is mid-bloom — the fantasy
+ * a player gets in the time they give a store listing.
  *
  * A returning player's progress meter sits directly above the button, because
- * "seventeen of twenty" is the reason to press it.
+ * "seventeen of sixty" is the reason to press it.
  */
+import heroArt from "/title-hero.jpg";
 import packageJson from "../../package.json";
 import { GAME_NAME } from "../game/constants.ts";
 import { DISCOVERY_COUNT } from "../game/sim/discoveries.ts";
@@ -21,79 +22,19 @@ import { kitOfferUnlocked } from "../systems/monetization.ts";
 /**
  * The hero.
  *
- * Three ink bottles and a drip, drawn as SVG in the same language as the shelf.
+ * Painted key art, shipped as `public/title-hero.jpg` (master in
+ * `src/assets/art/title-hero.jpg`). Matched to the store tile: craft-table
+ * teal, wooden shelf, living pigment on rag paper — no wordmark here, the
+ * screen already has one.
  *
- * This replaced a crop of the store tile, which at hero size was an unreadable
- * green-and-orange smear: a screenshot of a simulation is not an illustration,
- * and it told a new player nothing about what the game is. Bottles say "ink"
- * instantly, and they are the thing you actually touch first.
+ * Framed as a rounded card rather than blended into the background: the art
+ * carries its own opaque teal, and a card is both honest about that and the
+ * same raised-surface language every other control on the screen uses.
  */
 function TitleHero() {
-    const bottles = [
-        { x: 34, colour: "#3E7CB8", light: "#7FB4E0", height: 74 },
-        { x: 100, colour: "#D9A441", light: "#F2C979", height: 92 },
-        { x: 166, colour: "#3F7D45", light: "#79BA7F", height: 74 },
-    ];
     return (
-        <div className="title-hero" aria-hidden="true">
-            <svg viewBox="0 0 234 140" role="presentation">
-                <title>Three ink bottles</title>
-                {bottles.map((bottle) => {
-                    const width = 52;
-                    const top = 128 - bottle.height;
-                    return (
-                        <g key={bottle.x}>
-                            <ellipse cx={bottle.x + width / 2} cy={131} rx={26} ry={5} fill="rgba(0,0,0,0.22)" />
-                            <rect
-                                x={bottle.x + width / 2 - 9}
-                                y={top - 15}
-                                width={18}
-                                height={17}
-                                rx={4}
-                                fill="#b08753"
-                            />
-                            <rect
-                                x={bottle.x}
-                                y={top}
-                                width={width}
-                                height={bottle.height}
-                                rx={13}
-                                fill={bottle.colour}
-                            />
-                            <rect
-                                x={bottle.x}
-                                y={top + bottle.height * 0.45}
-                                width={width}
-                                height={bottle.height * 0.55}
-                                rx={13}
-                                fill="rgba(0,0,0,0.18)"
-                            />
-                            <rect
-                                x={bottle.x + 7}
-                                y={top + 11}
-                                width={7}
-                                height={bottle.height - 26}
-                                rx={3.5}
-                                fill="rgba(255,255,255,0.4)"
-                            />
-                            <rect
-                                x={bottle.x}
-                                y={top}
-                                width={width}
-                                height={bottle.height}
-                                rx={13}
-                                fill="none"
-                                stroke="rgba(255,255,255,0.6)"
-                                strokeWidth={3}
-                            />
-                        </g>
-                    );
-                })}
-                {/* A drop mid-fall from the middle bottle, so the mark reads as
-                    something happening rather than a still life. */}
-                <circle cx={126} cy={24} r={7} fill="#F2C979" />
-                <circle cx={126} cy={24} r={7} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={2.5} />
-            </svg>
+        <div className="title-hero">
+            <img src={heroArt} alt="" width={1152} height={864} decoding="async" fetchPriority="high" />
         </div>
     );
 }
@@ -105,10 +46,13 @@ export default function TitleScreen() {
     const percent = Math.round((discoveries / DISCOVERY_COUNT) * 100);
 
     const activate = async (action: () => void) => {
-        await inkAudio.unlock();
-        inkAudio.play("tap");
-        void runtimeServices.haptic("light");
+        // Act first — a suspended AudioContext can leave resume() pending and
+        // must never gate navigation.
         action();
+        void inkAudio.unlock().then(() => {
+            inkAudio.play("tap");
+            void runtimeServices.haptic("light");
+        });
     };
 
     const open = () =>

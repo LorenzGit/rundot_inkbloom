@@ -1,11 +1,41 @@
 {
   "items": [
     {
+      "itemId": "inkbloom_pot_of_ink",
+      "name": "A Pot of Ink",
+      "description": "Ten nudges to keep. A nudge names the inks a secret involves and leaves the arrangement to you \u2014 it is never a recipe. Every one of the sixty secrets stays free to find without it.",
+      "category": "consumable",
+      "price": {
+        "type": "bucks",
+        "value": "120"
+      },
+      "entitlements": [
+        {
+          "entitlementId": "inkbloom_nudges",
+          "quantity": 10,
+          "consumable": true
+        }
+      ],
+      "assets": {},
+      "unique": false,
+      "active": true,
+      "regions": [],
+      "refundEligible": true,
+      "refundWindowHours": 24,
+      "tags": ["inkbloom", "consumable", "hints"],
+      "sortOrder": 0,
+      "releasedAt": null,
+      "expiresAt": null
+    },
+    {
       "itemId": "inkbloom_illuminators_kit",
       "name": "The Illuminator's Kit",
-      "description": "Three more sheets — vellum, nocturne and blueprint — the mirror nib, and nudges with no daily limit. Every one of the twenty secrets stays free to find without it.",
+      "description": "Three more sheets \u2014 vellum, nocturne and blueprint \u2014 the mirror nib, and nudges with no daily limit. Every one of the sixty secrets stays free to find without it.",
       "category": "non_consumable",
-      "price": { "type": "bucks", "value": "400" },
+      "price": {
+        "type": "bucks",
+        "value": "400"
+      },
       "entitlements": [
         {
           "entitlementId": "inkbloom_illuminators_kit",

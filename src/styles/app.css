@@ -34,7 +34,13 @@
        phone, and it needs no font download. */
     --font-ui:
         -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    /* The game's identity, kept for the wordmark and journal entry titles. */
+    /* The wordmark. Rounded and heavy, because a serif title reads as a book
+       and the first screen has one job: say "this is a game". The serif below
+       is kept, but only where it is texture rather than identity. */
+    --font-display:
+        "Arial Rounded MT Bold", "SF Pro Rounded", ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        sans-serif;
+    /* Journal entry titles. */
     --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
     /* Short marginal notes only. */
     --font-hand: "Bradley Hand", "Chalkboard SE", "Segoe Print", "Comic Sans MS", cursive;
@@ -70,15 +76,35 @@
 
     --game-w: 100vw;
 
-    /* Browser insets are the local fallback. When attached, RUN replaces all
-       four values with host-authoritative insets before React mounts. */
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-right: env(safe-area-inset-right, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
-    --safe-left: env(safe-area-inset-left, 0px);
+    /* Safe insets. Priority chain:
+         1. Inline pixel values from applyRunSafeArea (host / measured env)
+         2. ViewDeck device-profile vars (when a handset is simulated)
+         3. Browser env(safe-area-inset-*) once viewport-fit=cover is set
+       Never rely on a bare env() token in JS — parseFloat cannot read it. */
+    --safe-top: var(--viewdeck-safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --safe-right: var(--viewdeck-safe-area-inset-right, env(safe-area-inset-right, 0px));
+    --safe-bottom: var(--viewdeck-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    --safe-left: var(--viewdeck-safe-area-inset-left, env(safe-area-inset-left, 0px));
 
     font-family: var(--font-ui);
     color-scheme: dark;
+
+    /*
+     * Type is sized in absolute px throughout, matching the workspace template's convention.
+     *
+     * `rem` looked tidy and was wrong here: it multiplies against a root size
+     * this game does not control — a WebView with a different default, or a
+     * player who has raised their system text size, silently rescales the whole
+     * interface. A game's controls should be the physical size the designer
+     * chose. `-webkit-text-size-adjust` closes the other half of that hole,
+     * where mobile Safari inflates text on its own.
+     *
+     * Floor is 13px for anything a player must read, 12px only for tracked
+     * all-caps micro-labels. Controls sit at 15-19px, panel titles at 26px,
+     * display type clamps in px.
+     */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 @media (min-aspect-ratio: 3 / 4) {
@@ -105,7 +131,7 @@ body {
     overflow: hidden;
     margin: 0;
     background: #0a5457;
-    font-size: 17px;
+    font-size: 18px;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
 }
@@ -177,7 +203,7 @@ input:focus-visible {
 
 .eyebrow {
     margin: 0;
-    font-size: 0.7rem;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -210,7 +236,7 @@ input:focus-visible {
         0 3px 0 rgba(255, 255, 255, 0.55) inset,
         0 8px 0 var(--green-edge),
         0 16px 24px rgba(5, 40, 42, 0.4);
-    font-size: 1.2rem;
+    font-size: 22px;
     font-weight: 900;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -241,7 +267,7 @@ input:focus-visible {
         0 3px 0 rgba(0, 0, 0, 0.16),
         0 8px 14px rgba(5, 40, 42, 0.28);
     color: var(--card-ink);
-    font-size: 0.92rem;
+    font-size: 17px;
     font-weight: 800;
     letter-spacing: 0.03em;
     transition: transform 90ms ease-out;
@@ -263,7 +289,7 @@ input:focus-visible {
         0 3px 0 rgba(0, 0, 0, 0.16),
         0 8px 14px rgba(5, 40, 42, 0.28);
     color: var(--card-ink);
-    font-size: 1.2rem;
+    font-size: 22px;
     font-weight: 900;
     transition: transform 90ms ease-out;
 }
@@ -334,9 +360,10 @@ input:focus-visible {
     position: relative;
     margin: 0;
     color: var(--color-ink);
-    font-family: var(--font-serif);
-    font-size: clamp(2rem, 9vw, 2.7rem);
-    font-weight: 400;
+    font-family: var(--font-display);
+    font-size: clamp(36px, 9.6vw, 50px);
+    font-weight: 900;
+    letter-spacing: -0.01em;
 }
 
 .splash-tagline {
@@ -344,7 +371,7 @@ input:focus-visible {
     margin: 0;
     color: var(--color-ink);
     font-family: var(--font-hand);
-    font-size: 0.92rem;
+    font-size: 17px;
     opacity: 0.66;
 }
 
@@ -367,7 +394,7 @@ input:focus-visible {
 
 .splash-status {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: 15px;
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -397,26 +424,33 @@ input:focus-visible {
    that tile does not appear twice on this screen. */
 .title-hero {
     position: relative;
-    width: min(72%, 280px);
-    aspect-ratio: 234 / 140;
-    margin-bottom: 0.1rem;
+    width: min(84%, 320px);
+    margin-bottom: 0.2rem;
+    /* The card, not the art, carries the shape: rounded, bevelled at the
+       bottom, dropped onto the desk. Same recipe as every button below it. */
+    border-radius: 26px;
+    background: var(--card);
+    padding: 5px;
+    box-shadow:
+        0 5px 0 rgba(6, 60, 62, 0.6),
+        0 16px 28px rgba(4, 40, 42, 0.45);
     animation: hero-float 5s ease-in-out infinite;
 }
 
-.title-hero svg {
-    position: relative;
+.title-hero img {
+    display: block;
     width: 100%;
-    height: 100%;
-    overflow: visible;
-    filter: drop-shadow(0 10px 16px rgba(4, 40, 42, 0.45));
+    height: auto;
+    border-radius: 21px;
 }
 
 .title-hero::before {
     content: "";
     position: absolute;
-    inset: -22%;
+    inset: -18%;
+    z-index: -1;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 233, 184, 0.32), transparent 62%);
+    background: radial-gradient(circle, rgba(255, 233, 184, 0.28), transparent 64%);
 }
 
 @keyframes hero-float {
@@ -431,22 +465,27 @@ input:focus-visible {
 
 .title-mark {
     margin: 0;
-    font-family: var(--font-serif);
-    font-size: clamp(2.4rem, 12vw, 3.2rem);
-    font-weight: 400;
+    font-family: var(--font-display);
+    font-size: clamp(44px, 13.4vw, 62px);
+    font-weight: 900;
+    letter-spacing: -0.015em;
     color: #fff;
+    /* A stacked hard shadow rather than a blur: the wordmark should look
+       extruded, the same way every button on this screen does. */
     text-shadow:
-        0 3px 0 rgba(6, 60, 62, 0.55),
-        0 8px 20px rgba(4, 40, 42, 0.6);
+        0 3px 0 #0b6b6b,
+        0 6px 0 rgba(6, 60, 62, 0.85),
+        0 12px 24px rgba(4, 40, 42, 0.55);
 }
 
 .title-tagline {
     margin: 0;
-    font-size: 0.82rem;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #ffe9b8;
+    text-shadow: 0 2px 0 rgba(6, 60, 62, 0.5);
 }
 
 /* Progress the returning player sees first. */
@@ -466,7 +505,7 @@ input:focus-visible {
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
-    font-size: 0.78rem;
+    font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -474,7 +513,7 @@ input:focus-visible {
 }
 
 .title-progress-row strong {
-    font-size: 1.4rem;
+    font-size: 26px;
     font-weight: 800;
     color: #fff;
     letter-spacing: 0;
@@ -507,7 +546,7 @@ input:focus-visible {
 
 .version-stamp {
     margin: 0.3rem 0 0;
-    font-size: 0.66rem;
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.14em;
     color: var(--cream);
@@ -527,7 +566,10 @@ input:focus-visible {
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    padding: calc(0.6rem + var(--safe-top)) calc(0.75rem + var(--safe-right)) 0.5rem calc(0.75rem + var(--safe-left));
+    /* safe-top alone under a Dynamic Island is not enough margin; keep a
+       minimum gap below the inset so the chip never kisses the status bar. */
+    padding: calc(max(0.55rem, 8px) + var(--safe-top)) calc(0.75rem + var(--safe-right)) 0.5rem
+        calc(0.75rem + var(--safe-left));
     pointer-events: none;
 }
 
@@ -556,7 +598,7 @@ input:focus-visible {
 }
 
 .progress-chip .star {
-    font-size: 1.15rem;
+    font-size: 22px;
     line-height: 1;
 }
 
@@ -570,11 +612,15 @@ input:focus-visible {
 }
 
 .progress-chip .count {
-    font-size: 1rem;
+    font-size: 18px;
     font-weight: 900;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--card-ink);
+    /* Spanish "descubrimientos" etc. must not shove the icon buttons off-screen. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .progress-chip .count em {
@@ -700,7 +746,7 @@ input:focus-visible {
 
 .panel-header h2 {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: 26px;
     font-weight: 800;
     letter-spacing: -0.01em;
 }
@@ -714,7 +760,7 @@ input:focus-visible {
     border-radius: var(--radius-pill);
     background: var(--card-shade);
     color: var(--card-ink);
-    font-size: 1rem;
+    font-size: 18px;
     font-weight: 900;
 }
 
@@ -730,7 +776,7 @@ input:focus-visible {
 
 .panel-copy {
     margin: 0 0 1rem;
-    font-size: 0.92rem;
+    font-size: 17px;
     line-height: 1.5;
     color: var(--card-muted);
 }
@@ -753,7 +799,7 @@ input:focus-visible {
 
 .prompt-card h3 {
     margin: 0;
-    font-size: 0.72rem;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -766,7 +812,7 @@ input:focus-visible {
 
 .prompt-brief {
     margin: 0.35rem 0 0.6rem;
-    font-size: 1.02rem;
+    font-size: 18px;
     font-weight: 600;
     line-height: 1.35;
     color: var(--card-ink);
@@ -778,7 +824,7 @@ input:focus-visible {
     align-items: center;
     gap: 0.35rem 0.8rem;
     margin-top: 0.5rem;
-    font-size: 0.74rem;
+    font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -794,7 +840,7 @@ input:focus-visible {
     padding: 0.6rem 0.85rem;
     border-radius: var(--radius);
     background: var(--card-shade);
-    font-size: 0.78rem;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -834,21 +880,21 @@ input:focus-visible {
     height: 2.1rem;
     border-radius: 50%;
     background: rgba(58, 46, 36, 0.1);
-    font-size: 0.86rem;
+    font-size: 16px;
     font-weight: 900;
     font-variant-numeric: tabular-nums;
     color: var(--card-muted);
 }
 
 .note-entry[data-found="true"] .mark {
-    font-size: 1rem;
+    font-size: 18px;
     box-shadow: 0 0 0 2px currentColor inset;
 }
 
 .note-entry .body strong {
     display: block;
     font-family: var(--font-serif);
-    font-size: 1.06rem;
+    font-size: 19px;
     font-weight: 400;
     color: var(--card-ink);
 }
@@ -857,7 +903,7 @@ input:focus-visible {
     display: block;
     margin-top: 0.1rem;
     font-family: var(--font-hand);
-    font-size: 0.82rem;
+    font-size: 15px;
     color: var(--card-muted);
 }
 
@@ -879,7 +925,7 @@ input:focus-visible {
     border-radius: 50%;
     background: linear-gradient(180deg, var(--gold-glow), var(--gold));
     box-shadow: 0 3px 0 var(--gold-edge);
-    font-size: 1rem;
+    font-size: 18px;
     font-weight: 900;
     color: #4a2c00;
     transition: transform 90ms ease-out;
@@ -898,7 +944,7 @@ input:focus-visible {
 
 .notes-footnote {
     margin: 0.9rem 0 0;
-    font-size: 0.76rem;
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: 0.05em;
     text-align: center;
@@ -921,7 +967,7 @@ input:focus-visible {
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: 0.92rem;
+    font-size: 17px;
     line-height: 1.4;
 }
 
@@ -944,7 +990,7 @@ input:focus-visible {
 .kit-price {
     display: block;
     margin-top: 0.9rem;
-    font-size: 0.8rem;
+    font-size: 15px;
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -962,7 +1008,7 @@ input:focus-visible {
         0 3px 0 rgba(255, 255, 255, 0.5) inset,
         0 6px 0 var(--green-edge),
         0 12px 20px rgba(5, 40, 42, 0.35);
-    font-size: 1rem;
+    font-size: 18px;
     font-weight: 900;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -1022,13 +1068,13 @@ input:focus-visible {
 }
 
 .paper-swatch strong {
-    font-size: 0.92rem;
+    font-size: 17px;
     font-weight: 800;
     color: var(--card-ink);
 }
 
 .paper-swatch span:not(.paper-chip) {
-    font-size: 0.72rem;
+    font-size: 13px;
     line-height: 1.3;
     color: var(--card-muted);
 }
@@ -1044,7 +1090,7 @@ input:focus-visible {
 
 .safety-note {
     margin: 1rem 0 0;
-    font-size: 0.76rem;
+    font-size: 14px;
     line-height: 1.45;
     color: var(--card-muted);
 }
@@ -1065,7 +1111,7 @@ input:focus-visible {
 }
 
 .setting-row > span:first-child {
-    font-size: 0.86rem;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -1119,7 +1165,7 @@ input:focus-visible {
 .segmented button {
     padding: 0.4rem 0.8rem;
     border-radius: var(--radius-pill);
-    font-size: 0.78rem;
+    font-size: 14px;
     font-weight: 800;
     color: var(--card-muted);
 }
@@ -1145,7 +1191,7 @@ input:focus-visible {
 
 .record-grid span {
     display: block;
-    font-size: 0.68rem;
+    font-size: 13px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -1155,10 +1201,197 @@ input:focus-visible {
 .record-grid strong {
     display: block;
     margin-top: 0.25rem;
-    font-size: 1.8rem;
+    font-size: 34px;
     font-weight: 900;
     color: var(--card-ink);
     font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   The Folio — kept sheets on the Record screen
+--------------------------------------------------------------------------- */
+
+.folio-title {
+    margin: 1.4rem 0 0.6rem;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--card-muted);
+}
+
+.folio-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* A kept sheet reads as a small sheet: paper-white mat, hard drop edge. */
+.folio-thumb {
+    display: block;
+    width: 100%;
+    padding: 0.3rem;
+    border-radius: calc(var(--radius) * 0.6);
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.16),
+        0 8px 14px rgba(5, 40, 42, 0.28);
+    transition: transform 90ms ease-out;
+}
+
+.folio-thumb:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
+}
+
+.folio-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: calc(var(--radius) * 0.4);
+}
+
+.folio-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    padding: calc(1.2rem + var(--safe-top)) 1.2rem calc(1.2rem + var(--safe-bottom));
+    background: rgba(5, 40, 42, 0.86);
+}
+
+.folio-lightbox img {
+    max-width: min(88vw, 420px);
+    max-height: 62vh;
+    border-radius: var(--radius);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.folio-caption {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--cream);
+}
+
+.folio-actions {
+    display: flex;
+    gap: 0.7rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The Colophon — the 60/60 ceremony
+--------------------------------------------------------------------------- */
+
+.colophon {
+    position: fixed;
+    inset: 0;
+    z-index: 14;
+    display: grid;
+    place-items: center;
+    padding: calc(1.4rem + var(--safe-top)) 1.4rem calc(1.4rem + var(--safe-bottom));
+    background: rgba(5, 40, 42, 0.88);
+    overflow: hidden;
+    /* Held back a beat so the "№ 60 / 60" toast lands on the page first. */
+    animation: colophon-in 600ms ease 2.2s both;
+}
+
+@keyframes colophon-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* The journal itself, falling: one drop per accent colour. */
+.colophon-drop {
+    position: absolute;
+    top: -3vh;
+    width: 9px;
+    height: 14px;
+    border-radius: 50% 50% 55% 55% / 40% 40% 62% 62%;
+    opacity: 0;
+    animation-name: colophon-fall;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+
+@keyframes colophon-fall {
+    0% {
+        transform: translateY(0) rotate(-8deg);
+        opacity: 0;
+    }
+    12% {
+        opacity: 0.9;
+    }
+    100% {
+        transform: translateY(108vh) rotate(10deg);
+        opacity: 0.75;
+    }
+}
+
+html[data-reduced-motion="true"] .colophon {
+    animation-delay: 2.2s;
+    animation-duration: 1ms;
+}
+
+html[data-reduced-motion="true"] .colophon-drop {
+    display: none;
+}
+
+.colophon-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.7rem;
+    width: min(100%, 380px);
+    padding: 1.8rem 1.6rem 1.6rem;
+    border-radius: var(--radius);
+    text-align: center;
+    background: linear-gradient(180deg, #ffffff, var(--card-shade));
+    box-shadow:
+        0 3px 0 rgba(0, 0, 0, 0.16),
+        0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.colophon-ordinal {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    color: var(--gold-deep, #b98a2e);
+}
+
+.colophon-card h2 {
+    margin: 0;
+    font-size: 34px;
+    font-weight: 900;
+    color: var(--card-ink);
+}
+
+.colophon-card p {
+    margin: 0 0 0.5rem;
+    font-size: 16px;
+    line-height: 1.45;
+    color: var(--card-muted);
+}
+
+.colophon-record-line {
+    margin: 1rem 0 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--gold-deep, #b98a2e);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1182,7 +1415,7 @@ input:focus-visible {
     box-shadow:
         0 4px 0 rgba(0, 0, 0, 0.14),
         0 12px 22px rgba(5, 40, 42, 0.32);
-    font-size: 0.9rem;
+    font-size: 16px;
     font-weight: 700;
     text-align: center;
     animation: toast-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
@@ -1205,12 +1438,24 @@ input:focus-visible {
     z-index: 8;
     display: grid;
     place-items: center;
+    align-content: center;
+    gap: 12px;
+    width: auto;
+    border: 0;
+    padding: 0;
     background: rgba(6, 48, 50, 0.7);
-    font-size: 1rem;
+    font-size: 18px;
     font-weight: 900;
     letter-spacing: 0.24em;
     text-transform: uppercase;
     color: var(--cream);
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.pause-veil span {
+    font-size: 12px;
+    letter-spacing: 0.1em;
 }
 
 .route-loading {
@@ -1274,4 +1519,181 @@ html[data-reduced-motion="true"] .panel,
 html[data-reduced-motion="true"] .overlay,
 html[data-reduced-motion="true"] .toast {
     animation-duration: 120ms;
+}
+
+/* ------------------------------------------------------------------ the pot */
+
+/*
+ * The entry-tier product, presented as a row rather than a hero.
+ *
+ * Deliberately quieter than the Kit card above it: a consumable that helps
+ * with one stuck evening should not shout louder than the durable, or the
+ * ladder reads upside down.
+ */
+.pot-card {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    margin: 0 0 1.1rem;
+    padding: 0.85rem 0.9rem;
+    border-radius: 20px;
+    background: var(--card-shade);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.09);
+}
+
+.pot-copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.pot-copy strong {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: var(--card-ink);
+}
+
+.pot-copy span {
+    font-size: 14px;
+    color: var(--card-muted);
+}
+
+.pot-held {
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--gold-edge);
+}
+
+.pot-buy {
+    flex: none;
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--radius-pill);
+    color: #4a2c0c;
+    background: linear-gradient(180deg, #ffd471, var(--gold) 46%, var(--gold-deep));
+    box-shadow:
+        0 2px 0 rgba(255, 255, 255, 0.5) inset,
+        0 4px 0 var(--gold-edge);
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.pot-buy:active {
+    transform: translateY(3px);
+    box-shadow:
+        0 2px 0 rgba(255, 255, 255, 0.45) inset,
+        0 1px 0 var(--gold-edge);
+}
+
+.pot-buy:disabled {
+    color: var(--card-muted);
+    background: var(--card);
+    box-shadow: none;
+    transform: none;
+}
+
+/* --------------------------------------------------------- the borrow offer */
+
+/*
+ * Answers a tap on a locked bottle. It is a dialog rather than a toast because
+ * it asks for something — a video — and anything that asks has to be dismissible
+ * without a decision, which is what the scrim and the second button are for.
+ */
+.borrow-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: borrow-in 160ms ease-out;
+}
+
+.borrow-dismiss {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 30, 32, 0.62);
+}
+
+.borrow-sheet {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    padding: 1.3rem 1.25rem calc(1.4rem + var(--safe-bottom));
+    border-radius: 30px 30px 0 0;
+    background: var(--card);
+    box-shadow: 0 -10px 30px rgba(4, 30, 32, 0.45);
+    text-align: center;
+}
+
+.borrow-bottle {
+    display: block;
+    width: 46px;
+    height: 58px;
+    margin: 0 auto 0.7rem;
+    border-radius: 12px 12px 14px 14px;
+    box-shadow:
+        0 0 0 3px rgba(255, 255, 255, 0.75),
+        0 6px 12px rgba(4, 30, 32, 0.3);
+}
+
+.borrow-sheet h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    color: var(--card-ink);
+}
+
+.borrow-name {
+    margin: 0.35rem 0 0;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    color: var(--gold-edge);
+}
+
+.borrow-line {
+    margin: 0.15rem 0 0.6rem;
+    font-family: var(--font-hand);
+    font-size: 16px;
+    color: var(--card-muted);
+}
+
+.borrow-blurb {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--card-ink);
+}
+
+.borrow-decline {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.7rem;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--card-muted);
+}
+
+@keyframes borrow-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .borrow-scrim {
+        animation: none;
+    }
 }

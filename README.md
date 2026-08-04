@@ -1,14 +1,29 @@
 # Inkbloom
 
-**paint inks that live**
+<p align="center">
+  <img src="public/thumbnail.jpg" alt="Inkbloom icon — three ink bottles on a teal craft desk above a page mid-bloom" width="192" height="192">
+</p>
 
-A portrait sandbox for RUN.world. Ten inks are poured onto a sheet of rag
-paper; they pile, flow, climb, burn, freeze, dissolve and bloom, and where two
-of them meet something happens that the page has not told you about yet. There
-are twenty of those secrets. Finding them is the whole game.
+<p align="center"><strong>paint inks that live</strong></p>
 
-Built on PixiJS 8 with a WebGPU-first renderer (automatic WebGL fallback),
-React 19 for the shell, and RUN Game SDK 5.24.
+A portrait sandbox for [RUN.world](https://run.world). Eighteen inks are poured
+onto a sheet of rag paper; they pile, flow, climb, burn, melt, creep, conduct,
+set and bloom — and where two of them meet something happens that the page has
+not told you about yet. There are sixty of those secrets. Finding them is the
+whole game.
+
+<p align="center">
+  <img src="docs/screenshots/gameplay.png" alt="Inkbloom gameplay: living inks on the page, discovery toast for Dew, ink shelf below" width="320">
+</p>
+
+Built on **PixiJS 8** with a WebGPU-first renderer (automatic WebGL fallback),
+**React 19** for the shell, and **RUN Game SDK 5.24**.
+
+| | |
+| --- | --- |
+| **Game ID** | `gCoSWVsu7MchgqeaLNrM` |
+| **Private play** | https://w.run/u/gCoSWVsu7MchgqeaLNrM/private |
+| **Orientation** | Portrait |
 
 ---
 
@@ -16,24 +31,24 @@ React 19 for the shell, and RUN Game SDK 5.24.
 
 Pour an ink. Watch what it does. Pour a second one into it.
 
-- **The shelf** — eleven slots: six inks to start, four more that arrive at
-  4, 8, 12 and 16 discoveries, and a kneaded eraser. Below them, the brush size
-  and a torn-off sheet to start again.
-- **Field Notes** — the counter in the top right opens the journal. Twenty
-  lines; the found ones are titled, the rest are blank. Each blank line can be
-  nudged, which writes a marginal note next to it — never a recipe.
+- **The shelf** — nineteen slots in two rows: six inks to start, twelve more
+  that arrive every four discoveries up to 48, and a kneaded eraser. Below them,
+  the brush size and a torn-off sheet to start again.
+- **Field Notes** — the progress chip opens the journal. Sixty lines; the found
+  ones are titled, the rest are blank. Each blank line can be nudged, which
+  writes a marginal note next to it — never a recipe.
 - **Today's Page** — a short daily brief, drawn only from secrets you already
   know. Keeping it banks a nudge and extends a streak.
+- **The page stirs** — while the sheet holds every ink of some secret you have
+  not found yet, the rule border breathes a faint gold. It never says which
+  secret, or where; it only says *keep going*.
+- **The Folio** — tearing a painted sheet no longer destroys it: the last ten
+  land in a gallery on the Record screen, and any of them can be shared as an
+  image from there.
+- **The Colophon** — the sixtieth secret summons a one-time ceremony.
 
-Keyboard: `1`–`0` select inks, `E` erases, `B`/space toggles brush size,
-`M` mirrors (with the Kit), `X` tears the sheet off, arrows cycle the shelf.
-
-## The twenty secrets
-
-Nothing here should be read before playing. They are enumerated in
-`src/game/sim/discoveries.ts`, and every one has a scripted reachability
-scenario in `scripts/verify-sim.mjs` — a secret that cannot be found is a
-broken promise, and a silent one.
+Keyboard: `1`–`0` then `Q`–`I` select inks, `E` erases, `B`/space toggles brush
+size, `M` mirrors (with the Kit), `X` tears the sheet off, arrows cycle the shelf.
 
 ## Architecture
 
@@ -42,39 +57,36 @@ broken promise, and a silent one.
 | `src/game/sim/` | The simulation. Pure, headless, deterministic — no canvas, no DOM, no Pixi. This is what `npm run simulate` proves. |
 | `src/game/scene/` | The Pixi scene: paper generation, cells-to-pigment, the hand-drawn shelf, layout, and input. |
 | `src/systems/` | Progress, save, hints, the daily prompt, monetization, and background services. |
-| `src/ui/` | The React shell: title, header, and the four panels. |
+| `src/ui/` | The React shell: title, header, and the panels. |
 | `src/sdk/` | The RUN boundary. `runSdk.ts` for lifecycle and storage; `runCommerce.ts` for anything that costs money. |
+| `src/assets/art/` | Painted key-art masters (store tile + title hero). |
 
-Two decisions are worth knowing before touching the renderer, and both are
-documented at their call sites:
+Two renderer rules worth knowing before you touch paint code (full detail in
+[`AGENTS.md`](AGENTS.md)):
 
-1. **The ink layer never carries a Pixi filter directly.** A filtered display
-   object is composited by its filter pass rather than by its own blend mode, so
-   a blur over a `multiply` blend silhouettes every ink in flat black. Ink is
-   composited into an offscreen plate with normal blending, and the finished
-   plate is multiplied onto the paper once.
-2. **The simulation's hot-path RNG is `SimRandom`, not `NoiseRandom`.** It is
-   the same squirrel-noise hash with the per-call argument validation removed,
-   because the automaton draws millions of numbers a second. `npm run simulate`
-   asserts the two produce identical streams, so there is still exactly one
-   deterministic random source and no `Math.random()` anywhere in game logic.
+1. **The ink layer never carries a Pixi filter directly** — multiply + filter
+   silhouettes every ink black; composite into a plate first.
+2. **Hot-path RNG is `SimRandom`**, not `NoiseRandom` or `Math.random()`.
 
 ## Art direction
 
-A bright craft table: a saturated teal ground, a warm wooden shelf of ink
-bottles, cream cards with chunky bevelled edges, and one amber accent for
-progress and reward. The page is a real sheet of rag paper and is the only quiet
-thing on screen. Everything is procedural — the paper's fibre and foxing, the
-ink's granulation and wet edge, the bottles, the title hero, the audio, and
-`public/thumbnail.jpg`, which is rendered by the simulation itself.
-
-Full notes: [`docs/art-direction.md`](docs/art-direction.md).
+A bright craft table: saturated teal ground, warm wooden shelf of ink bottles,
+cream cards with chunky bevelled edges, amber for progress and reward. The page
+is a real sheet of rag paper. Full notes: [`docs/art-direction.md`](docs/art-direction.md).
 
 ## Monetization
 
-One product, one ad placement, and a promise printed on the same screen as the
-price: every one of the twenty secrets, all ten inks, and the daily page are
-free forever. See [`docs/monetization.md`](docs/monetization.md).
+Hybrid — two Run Bits products and two player-initiated rewarded placements. No
+interstitials. Every secret, every ink, and the daily page stay free forever.
+
+| Offer | Price / type |
+| --- | --- |
+| **A Pot of Ink** | 120 RB · consumable · ten nudges |
+| **The Illuminator's Kit** | 400 RB · durable · extra sheets, mirror nib, unlimited nudges |
+| **A Nudge from the Margin** | Rewarded · Field Notes |
+| **Borrow an Ink** | Rewarded · next locked bottle for one sheet |
+
+See [`docs/monetization.md`](docs/monetization.md).
 
 ## Commands
 
@@ -82,22 +94,25 @@ free forever. See [`docs/monetization.md`](docs/monetization.md).
 npm run dev            # local development on :5184
 npm run dev:playground # opt-in RUN Playground (real services, real purchases)
 npm run typecheck
-npm run simulate       # headless proof: RNG parity, all 20 secrets reachable, determinism
+npm run simulate       # headless proof: RNG parity, all 60 secrets reachable, determinism
 npm run test           # invariants + NoiseRandom + simulate
 npm run build          # embedded-libraries production build
 npm run build:bundled  # standalone production build
 npm run check          # format, lint, test, public audit, both builds
-npm run thumbnail      # re-render public/thumbnail.jpg from the simulation
-npm run visual-qa      # headless screenshots of every screen, driven by the real buttons
+npm run thumbnail      # re-encode public key art from src/assets/art/
+npm run visual-qa      # headless screenshots of every screen
 ```
 
-`?screen=page|notes|shop|settings|stats` deep-links a screen in development.
-`?debug=1` shows runtime diagnostics; `?qa=1` installs the semantic automation
-contract. All three are development-only and can never fabricate a RUN outcome.
+Development query parameters (`?screen=`, `?debug=1`, `?qa=1`) are
+development-only and can never fabricate a RUN outcome.
 
 ## Deploying
 
-`game.config.prod.json` still carries `REPLACE_WITH_RUN_GAME_ID`; run
-`rundot init` to claim a game id, then upload `rundot/shop.config.json` and
-`rundot/liveops.config.json` before the monetization surfaces will do anything
-but fail closed. Build immediately before every deploy.
+```sh
+npm run build
+rundot deploy          # private by default
+rundot game set-public # only when you want it on explore
+```
+
+Build immediately before every deploy. Shop and LiveOps configs live under
+`rundot/`.

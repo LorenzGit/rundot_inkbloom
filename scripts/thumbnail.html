@@ -12,12 +12,12 @@
 <canvas id="thumb" width="512" height="512"></canvas>
 <script type="module">
 /**
- * The store thumbnail, rendered by the game itself.
+ * Optional sim-faithful composition (not the shipping store tile).
  *
- * The tile is not an illustration *of* Inkbloom — it is a real page produced by
- * the real simulation: a briar grown up a sheet, set alight from one side, with
- * water pooled at the foot of it. Nothing here is drawn by hand, so the tile can
- * never drift away from what the game actually looks like.
+ * Shipping key art is painted: `src/assets/art/store-thumbnail.jpg` →
+ * `public/thumbnail.jpg` via `npm run thumbnail`. This page still builds a
+ * real briar/ember/rill page from the live simulation for local curiosity and
+ * colour-rule checks. Do not treat its output as the store asset.
  *
  * Deterministic: the same seed always produces the same tile.
  *

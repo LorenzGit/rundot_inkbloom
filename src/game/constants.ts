@@ -6,14 +6,25 @@ export const GAME_TAGLINE = "paint inks that live";
 /**
  * Simulation grid.
  *
- * Deliberately taller than a notebook page: a phone is roughly 9:19.5, and a
- * 3:4 sheet leaves a third of the screen as dead desk. A tall page fills the
- * device *and* plays better — material has room to fall, climb and react
- * before it reaches an edge.
+ * The sheet fills every pixel between the header and the shelf, so the grid is
+ * **derived from the device** rather than fixed. A fixed 150x258 grid had one
+ * aspect ratio and the phone had another, which left a band of bare desk down
+ * both sides of the page — dead space on the one screen the player looks at.
+ *
+ * The long edge is fixed so a cell is always the same fraction of the page's
+ * height, and the short edge follows from the space actually available. Cells
+ * therefore stay square and the ink reads at the same scale on every device.
  */
-export const SIM_WIDTH = 150;
 export const SIM_HEIGHT = 258;
-export const PAGE_ASPECT = SIM_WIDTH / SIM_HEIGHT;
+export const SIM_MIN_WIDTH = 96;
+export const SIM_MAX_WIDTH = 260;
+
+/** Cell columns for a page of the given width-over-height ratio. */
+export function simWidthForAspect(aspect: number): number {
+    const columns = Math.round(SIM_HEIGHT * aspect);
+    if (!Number.isFinite(columns) || columns < SIM_MIN_WIDTH) return SIM_MIN_WIDTH;
+    return columns > SIM_MAX_WIDTH ? SIM_MAX_WIDTH : columns;
+}
 
 /** Fixed simulation rate. Catch-up is capped so a stalled tab cannot spiral. */
 export const SIM_HZ = 60;

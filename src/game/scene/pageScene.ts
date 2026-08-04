@@ -18,7 +18,9 @@
 import { Container, Graphics, Sprite, Text, TextStyle, type Application, type Texture } from "pixi.js";
 import type { Stage } from "../stage.ts";
 import { InkSim } from "../sim/inkSim.ts";
-import { ERASER_INDEX, INKS } from "../sim/elements.ts";
+import { BASALT, ELEMENT_COUNT, ERASER_INDEX, INKS } from "../sim/elements.ts";
+import { DISCOVERIES, DISCOVERY_COUNT } from "../sim/discoveries.ts";
+import { pageStirs } from "../sim/stirs.ts";
 import { createSimTexture, type SimTexture } from "./simTexture.ts";
 import { createPaperTexture, ruledBorderPath } from "./paperTexture.ts";
 import { paperStyle } from "./papers.ts";
@@ -42,14 +44,14 @@ import {
     drawBottle,
     drawBrushIcon,
     drawEraser,
-    drawLockDisc,
+    drawLockPill,
     drawNib,
-    LOCK_BADGE_OFFSET,
+    type LockBadge,
     drawTornSheetIcon,
     starPath,
 } from "./handDrawn.ts";
 import { readSafeInsets } from "./safeArea.ts";
-import { publishShelfSlots } from "../../qa/browserContract.ts";
+import { publishLockBadges, publishPageRect, publishShelfSlots, publishSimProbe } from "../../qa/browserContract.ts";
 import {
     BRUSH_LARGE,
     BRUSH_SMALL,
@@ -57,7 +59,7 @@ import {
     POUR_TAIL_STEPS,
     SIM_HEIGHT,
     SIM_STEP_MS,
-    SIM_WIDTH,
+    simWidthForAspect,
     TAP_MAX_MS,
 } from "../constants.ts";
 import { store } from "../../state/store.ts";
@@ -65,11 +67,14 @@ import { inkAudio } from "../../audio/inkAudio.ts";
 import {
     foundIndicesFromSave,
     isInkUnlocked,
+    nextInkUnlock,
     recordDiscovery,
     takeCelebrations,
     type Celebration,
 } from "../../systems/progress.ts";
 import { evaluate as evaluatePrompt, noteSheetReactions, resetSheetReactions } from "../../systems/dailyPrompt.ts";
+import { folio } from "../../systems/folio.ts";
+import { borrowAvailability, endBorrow } from "../../systems/monetization.ts";
 import { saveSystem } from "../../systems/save.ts";
 import { runtimeServices } from "../../systems/runtimeServices.ts";
 import { t } from "../../systems/localization.ts";
@@ -80,9 +85,17 @@ export interface Scene {
 }
 
 /** Layout in design units. The short edge is fixed at 720 by `stage.ts`. */
-const PAGE_MARGIN = 15;
+/**
+ * Desk left visible down each side of the sheet.
+ *
+ * Small on purpose: the sheet is the game, and the page used to be letterboxed
+ * inside a fixed aspect ratio that left a wide teal band on both sides. All
+ * that is left is enough room for the drop shadow to read as a sheet lying on
+ * a desk rather than as a hole cut in it.
+ */
+const PAGE_MARGIN = 9;
 /** Gap between the bottom of the sheet and the lip of the shelf. */
-const PAGE_TO_SHELF = 16;
+const PAGE_TO_SHELF = 10;
 /**
  * Reserved for the React HUD above the canvas.
  *
@@ -115,6 +128,16 @@ interface ShelfItem {
 const SLOT_GAP = 6;
 
 /**
+ * How many ink slots sit in the top row. The rest go underneath.
+ *
+ * Fifteen bottles will not fit across a phone at a size worth tapping — a
+ * single row put them at about 31 design units, which is a 17px target. Two
+ * rows cost roughly 100 units of plank and buy back a *larger* bottle than the
+ * original ten-ink row had, which is the trade worth making.
+ */
+const INK_ROW_ONE = Math.ceil(INKS.length / 2);
+
+/**
  * Shelf geometry, derived once from the available width.
  *
  * Everything cascades from the slot pitch downward — pitch, then slot, then
@@ -122,6 +145,10 @@ const SLOT_GAP = 6;
  * to it. Deriving the slot *from* the bottle is what let them overlap: the
  * bottle was clamped to a maximum, the slot was 1.28x the bottle, and on a
  * wide-ish phone that product exceeded the pitch.
+ *
+ * The row offsets are part of the same cascade rather than being re-derived at
+ * layout time, so `contentHeight` and the actual control positions cannot
+ * disagree about how tall the plank is.
  */
 interface ShelfMetrics {
     slotPitch: number;
@@ -131,16 +158,40 @@ interface ShelfMetrics {
     toolSize: number;
     toolSlotW: number;
     toolSlotH: number;
+    /** The locked-bottle badge, derived from its own font size. */
+    lockBadge: LockBadge;
+    /** Row centres, measured down from the tray lip. */
+    rowOneOffset: number;
+    rowTwoOffset: number;
+    toolRowOffset: number;
     /** Total plank height this content needs, excluding the bottom safe area. */
     contentHeight: number;
 }
 
 function shelfMetrics(available: number): ShelfMetrics {
-    const slotPitch = (available - SLOT_GAP * 2) / INKS.length;
+    const slotPitch = (available - SLOT_GAP * 2) / INK_ROW_ONE;
     const slotW = slotPitch - SLOT_GAP;
-    const bottleSize = Math.max(28, Math.min(58, slotW * 0.76));
-    const slotH = bottleSize * 1.62;
-    const toolSize = Math.max(28, Math.min(46, bottleSize * 0.88));
+    const bottleSize = Math.max(28, Math.min(62, slotW * 0.78));
+    const slotH = bottleSize * 1.58;
+    const toolSize = Math.max(30, Math.min(50, bottleSize * 0.82));
+    const toolSlotH = toolSize * 1.34;
+
+    // The badge cascade, in this order and no other: pick a font size that is
+    // legible on a phone, give the pill room for that font's *line box* rather
+    // than its cap height, then sit the pill on the slot's bottom edge so it
+    // cannot hang into the row below however tall it turns out to be.
+    const lockFontSize = Math.max(24, bottleSize * 0.4);
+    const lockHeight = lockFontSize * 1.5;
+    const lockBadge: LockBadge = {
+        fontSize: lockFontSize,
+        height: lockHeight,
+        width: Math.max(lockHeight * 1.7, slotW * 0.74),
+        y: slotH / 2 - lockHeight / 2 - 2,
+    };
+
+    const rowOneOffset = 46 + slotH / 2;
+    const rowTwoOffset = rowOneOffset + slotH + 4;
+    const toolRowOffset = rowTwoOffset + slotH / 2 + 16 + toolSlotH / 2;
     return {
         slotPitch,
         slotW,
@@ -148,8 +199,12 @@ function shelfMetrics(available: number): ShelfMetrics {
         bottleSize,
         toolSize,
         toolSlotW: toolSize * 1.5,
-        toolSlotH: toolSize * 1.34,
-        contentHeight: 42 + bottleSize * 1.15 + 28 + toolSize * 1.34 + 26,
+        toolSlotH,
+        lockBadge,
+        rowOneOffset,
+        rowTwoOffset,
+        toolRowOffset,
+        contentHeight: toolRowOffset + toolSlotH / 2 + 20,
     };
 }
 
@@ -169,9 +224,38 @@ interface Toast extends Celebration {
     age: number;
 }
 
+/**
+ * The page's box, given the design space and the insets.
+ *
+ * Pulled out of `layout()` so the grid can be sized from it *before* the
+ * simulation exists: the sheet fills the whole band, so the number of columns
+ * is a property of the device rather than a constant.
+ */
+function pageBox(stage: Stage): { x: number; y: number; w: number; h: number; shelfTop: number } {
+    const width = stage.designWidth();
+    const height = stage.designHeight();
+    const insets = readSafeInsets();
+    const scale = stage.scale() || 1;
+    const safeTop = insets.top / scale;
+    const safeLeft = insets.left / scale;
+    const safeRight = insets.right / scale;
+    const headerHeight = HEADER_RESERVE + safeTop;
+    const shelfTop = height - (shelfMetrics(width - safeLeft - safeRight).contentHeight + insets.bottom / scale);
+    const w = width - safeLeft - safeRight - PAGE_MARGIN * 2;
+    const h = Math.max(160, shelfTop - headerHeight - PAGE_TO_SHELF);
+    return { x: safeLeft + PAGE_MARGIN, y: headerHeight, w, h, shelfTop };
+}
+
 export function createPageScene(app: Application, stage: Stage): Scene {
     const state = store.get();
     const sheetRandom = new NoiseRandom(0xa5c0_1a3b, 0);
+
+    // Sized once, from the space the sheet is actually going to occupy. A later
+    // resize stretches the same grid rather than rebuilding it, because a new
+    // grid means a blank page and losing the player's work to a rotating status
+    // bar is a far worse bug than a cell that is a percent off square.
+    const firstBox = pageBox(stage);
+    const SIM_WIDTH = simWidthForAspect(firstBox.w / firstBox.h);
 
     const sim = new InkSim({
         width: SIM_WIDTH,
@@ -189,13 +273,15 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const inkLayer = new Container();
     const bleedSprite = new Sprite();
     const inkSprite = new Sprite();
+    const glowSprite = new Sprite();
     const ruleGraphics = new Graphics();
+    const stirGraphics = new Graphics();
     const tornSprite = new Sprite();
     const shelfGroup = new Container();
     const shelfGraphics = new Graphics();
     const shelfLabel = new Text({
         text: "",
-        style: new TextStyle({ fontFamily: UI, fontSize: 20, fontWeight: "900", fill: 0x4a2c0c, letterSpacing: 2 }),
+        style: new TextStyle({ fontFamily: UI, fontSize: 36, fontWeight: "900", fill: 0x4a2c0c, letterSpacing: 2 }),
     });
     const flashGraphics = new Graphics();
     const particleGraphics = new Graphics();
@@ -203,11 +289,16 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const toastCard = new Graphics();
     const toastTitle = new Text({
         text: "",
-        style: new TextStyle({ fontFamily: UI, fontSize: 26, fontWeight: "900", fill: CARD_INK }),
+        style: new TextStyle({ fontFamily: UI, fontSize: 44, fontWeight: "900", fill: CARD_INK }),
     });
     const toastNote = new Text({
         text: "",
-        style: new TextStyle({ fontFamily: HAND, fontSize: 15, fill: CARD_MUTED }),
+        style: new TextStyle({ fontFamily: HAND, fontSize: 30, fill: CARD_MUTED }),
+    });
+    /** "№ 23 / 60" — the find's place in the journal, pressed into the card. */
+    const toastStamp = new Text({
+        text: "",
+        style: new TextStyle({ fontFamily: SERIF, fontSize: 24, fill: CARD_MUTED }),
     });
     const hintLine = new Text({ text: t("HintFirstTouch"), style: labelStyle(17, 0x2a2622, HAND) });
     const cursor = new Container();
@@ -217,6 +308,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const simTexture: SimTexture = createSimTexture(SIM_WIDTH, SIM_HEIGHT);
     bleedSprite.texture = simTexture.bleed;
     inkSprite.texture = simTexture.mark;
+    glowSprite.texture = simTexture.glow;
 
     /**
      * Both layers blend straight onto the paper, with no Pixi filter anywhere
@@ -239,11 +331,16 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     inkSprite.alpha = 0.96;
     bleedSprite.blendMode = "multiply";
     inkSprite.blendMode = "multiply";
+    // The light plate. `add` regardless of paper: pigment swaps to `screen` on
+    // dark sheets, but light is light on any ground. A Sprite, never a
+    // Graphics — an additive Graphics silently renders nothing.
+    glowSprite.blendMode = "add";
 
     inkLayer.addChild(bleedSprite, inkSprite);
-    pageGroup.addChild(pageShadow, paperSprite, inkLayer, ruleGraphics, tornSprite);
+    pageGroup.addChild(pageShadow, paperSprite, inkLayer, ruleGraphics, stirGraphics, glowSprite, tornSprite);
+    stirGraphics.alpha = 0;
     shelfGroup.addChild(shelfGraphics, shelfLabel);
-    toastGroup.addChild(toastCard, toastTitle, toastNote);
+    toastGroup.addChild(toastCard, toastTitle, toastNote, toastStamp);
     toastGroup.visible = false;
     cursor.addChild(cursorNib, cursorRing);
     cursor.visible = false;
@@ -266,6 +363,10 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const page = { x: 0, y: 0, w: 720, h: 960 };
     const shelf = { top: 0, height: 220 };
     let shelfItems: ShelfItem[] = [];
+    // Kept alongside the items because the badge is slot geometry, and both the
+    // draw pass and the lock-mark layout have to agree about it exactly.
+    let lockBadge: LockBadge = shelfMetrics(stage.designWidth()).lockBadge;
+    let lastBorrowedInk: number | null = store.get().borrowedInk;
 
     const particles: Particle[] = Array.from({ length: 120 }, () => ({
         active: false,
@@ -308,6 +409,29 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     /** 1 the instant a secret is found, easing back to 0. */
     let celebration = 0;
     let celebrationColour = 0xf5b841;
+    /**
+     * The held beat: the simulation stands still for a breath when a secret
+     * fires, so the player sees the moment instead of its aftermath. Only the
+     * first find of a burst holds — a chain reaction must not stutter.
+     */
+    let celebrationHoldMs = 0;
+    /** Expanding ring at the reacting cell. Negative age means inactive. */
+    let bloomX = 0;
+    let bloomY = 0;
+    let bloomAge = -1;
+    /**
+     * The page stirring: an unfound secret's elements are all on the sheet.
+     *
+     * `stirActive` is the fact, re-checked about twice a second; `stirLevel`
+     * eases toward it so the shimmer breathes in and out rather than snapping.
+     */
+    let stirActive = false;
+    let stirLevel = 0;
+    let stirPhase = 0;
+    let stirCheckMs = 0;
+    const elementCensus = new Uint32Array(ELEMENT_COUNT);
+    /** Marks made since the last Folio capture — a clean sheet is never kept. */
+    let sheetDirty = false;
     let accumulatorMs = 0;
     let frameAverageMs = 8;
     let framesSeen = 0;
@@ -377,6 +501,28 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (point) ruleGraphics.lineTo(page.x + point[0] * page.w, page.y + point[1] * page.h);
         }
         ruleGraphics.stroke({ width: 2.2, color: style.rule, alpha: 0.2, cap: "round", join: "round" });
+        drawStir();
+    }
+
+    /**
+     * The stir shimmer: the same ruled border, re-traced in gold.
+     *
+     * Drawn once here and animated purely through `stirGraphics.alpha`, so the
+     * tell costs nothing per frame. It deliberately says only "something is
+     * possible on this sheet" — which secret, and where, stays the page's
+     * business.
+     */
+    function drawStir(): void {
+        stirGraphics.clear();
+        const points = ruledBorderPath(sheetSeed);
+        const first = points[0];
+        if (!first) return;
+        stirGraphics.moveTo(page.x + first[0] * page.w, page.y + first[1] * page.h);
+        for (let index = 1; index < points.length; index++) {
+            const point = points[index];
+            if (point) stirGraphics.lineTo(page.x + point[0] * page.w, page.y + point[1] * page.h);
+        }
+        stirGraphics.stroke({ width: 5, color: GOLD_GLOW, cap: "round", join: "round" });
     }
 
     // ----------------------------------------------------------------- layout
@@ -400,19 +546,17 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         shelf.height = metrics.contentHeight + safeBottom;
         shelf.top = height - shelf.height;
 
-        const usableWidth = width - safeLeft - safeRight - PAGE_MARGIN * 2;
-        const band = shelf.top - headerHeight - PAGE_TO_SHELF;
-        page.h = Math.max(160, Math.min(band, (usableWidth * SIM_HEIGHT) / SIM_WIDTH));
-        page.w = (page.h * SIM_WIDTH) / SIM_HEIGHT;
-        page.x = safeLeft + (width - safeLeft - safeRight - page.w) / 2;
-        // Weighted upward: the header already occupies the top, so leftover
-        // desk belongs below the sheet where it meets the shelf.
-        page.y = headerHeight + (band - page.h) * 0.4;
+        // The sheet takes the whole band. The grid was sized from this box, so
+        // there is nothing to letterbox and no bare desk down either side.
+        page.w = width - safeLeft - safeRight - PAGE_MARGIN * 2;
+        page.h = Math.max(160, shelf.top - headerHeight - PAGE_TO_SHELF);
+        page.x = safeLeft + PAGE_MARGIN;
+        page.y = headerHeight;
 
         paperSprite.position.set(page.x, page.y);
         paperSprite.width = page.w;
         paperSprite.height = page.h;
-        for (const sprite of [bleedSprite, inkSprite]) {
+        for (const sprite of [bleedSprite, inkSprite, glowSprite]) {
             sprite.position.set(page.x, page.y);
             sprite.width = page.w;
             sprite.height = page.h;
@@ -425,7 +569,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
         hintLine.anchor.set(0.5, 1);
         hintLine.position.set(page.x + page.w / 2, page.y + page.h - 18);
-        hintLine.style.fontSize = Math.max(13, page.w * 0.032);
+        hintLine.style.fontSize = Math.max(28, page.w * 0.046);
 
         layoutShelf(width, safeLeft, safeRight, metrics);
         layoutLockMarks();
@@ -478,22 +622,25 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     function layoutShelf(width: number, safeLeft: number, safeRight: number, metrics: ShelfMetrics): void {
         shelfItems = [];
         const { slotPitch, slotW, slotH, bottleSize, toolSize, toolSlotW, toolSlotH } = metrics;
+        lockBadge = metrics.lockBadge;
+        const centre = safeLeft + (width - safeLeft - safeRight) / 2;
 
-        // Offsets are measured down from the tray lip, so a tall phone gets a
-        // deeper plank rather than the same controls spread thinly across it.
-        // A bottle's cork reaches about 0.7 of its size above centre, so the
-        // first row has to clear the label by that much or they collide.
-        const labelY = shelf.top + 19;
-        const rowOneY = shelf.top + 42 + bottleSize * 0.7;
-        const rowTwoY = rowOneY + bottleSize * 0.45 + 28 + toolSize * 0.6;
+        const labelY = shelf.top + 24;
+        const rowOneY = shelf.top + metrics.rowOneOffset;
+        const rowTwoY = shelf.top + metrics.rowTwoOffset;
 
-        const startX = safeLeft + SLOT_GAP + slotPitch / 2;
+        // Each row is centred on its own, so the shorter second row sits under
+        // the middle of the first rather than hanging off the left edge.
         for (let slot = 0; slot < INKS.length; slot++) {
+            const inRowOne = slot < INK_ROW_ONE;
+            const column = inRowOne ? slot : slot - INK_ROW_ONE;
+            const count = inRowOne ? INK_ROW_ONE : INKS.length - INK_ROW_ONE;
+            const rowStart = centre - (count * slotPitch) / 2 + slotPitch / 2;
             shelfItems.push({
                 kind: "ink",
                 index: slot,
-                x: startX + slot * slotPitch,
-                y: rowOneY,
+                x: rowStart + column * slotPitch,
+                y: inRowOne ? rowOneY : rowTwoY,
                 size: bottleSize,
                 slotW,
                 slotH,
@@ -501,15 +648,16 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         }
 
         const tools: ShelfKind[] = mirror ? ["brush", "mirror", "tear"] : ["brush", "tear"];
-        const toolPitch = toolSlotW + SLOT_GAP * 3;
-        const centre = safeLeft + (width - safeLeft - safeRight) / 2;
+        // Wide enough for the *captions*, which are longer than the icons: at
+        // icon pitch, "size" and "new sheet" ran into each other.
+        const toolPitch = Math.max(toolSlotW + SLOT_GAP * 3, 168);
         tools.forEach((kind, position) => {
             const offset = (position - (tools.length - 1) / 2) * toolPitch;
             shelfItems.push({
                 kind,
                 index: -1,
                 x: centre + offset,
-                y: rowTwoY,
+                y: shelf.top + metrics.toolRowOffset,
                 size: toolSize,
                 slotW: toolSlotW,
                 slotH: toolSlotH,
@@ -518,7 +666,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
         shelfLabel.anchor.set(0.5, 0.5);
         shelfLabel.position.set(centre, labelY);
-        shelfLabel.style.fontSize = Math.max(15, bottleSize * 0.36);
+        shelfLabel.style.fontSize = Math.max(34, bottleSize * 0.6);
     }
 
     // -------------------------------------------------------------- shelf draw
@@ -589,7 +737,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (item.kind === "ink" && ink) {
                 if (item.index === ERASER_INDEX) drawEraser(shelfGraphics, drawSize, true);
                 else drawBottle(shelfGraphics, { size: drawSize, colour: ink.colour, locked, onDesk: true });
-                if (locked) drawLockDisc(shelfGraphics, drawSize);
+                if (locked) drawLockPill(shelfGraphics, lockBadge, popScale);
             } else if (item.kind === "brush") {
                 drawBrushIcon(shelfGraphics, drawSize, largeBrush, INKS[selected]?.colour ?? GOLD, true);
             } else if (item.kind === "mirror") {
@@ -630,7 +778,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     const lockMarks: Text[] = INKS.map((ink) => {
         const mark = new Text({
             text: ink.unlockAt > 0 ? `${ink.unlockAt}` : "",
-            style: new TextStyle({ fontFamily: UI, fontSize: 16, fontWeight: "800", fill: GOLD, align: "center" }),
+            style: new TextStyle({ fontFamily: UI, fontSize: 26, fontWeight: "800", fill: GOLD, align: "center" }),
         });
         mark.anchor.set(0.5);
         mark.alpha = 0.85;
@@ -657,7 +805,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             text: label,
             style: new TextStyle({
                 fontFamily: UI,
-                fontSize: 13,
+                fontSize: 24,
                 fontWeight: "800",
                 fill: 0x5a3714,
                 align: "center",
@@ -677,7 +825,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (item.kind === "ink") continue;
             const caption = toolCaptions.get(item.kind);
             if (!caption) continue;
-            caption.style.fontSize = Math.max(11, item.size * 0.29);
+            caption.style.fontSize = Math.max(24, item.size * 0.46);
             caption.position.set(item.x, item.y + item.size * 0.46);
             caption.visible = true;
         }
@@ -689,8 +837,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             if (item.kind !== "ink") continue;
             const mark = lockMarks[item.index];
             if (!mark) continue;
-            mark.style.fontSize = Math.max(11, item.size * 0.3);
-            mark.position.set(item.x + item.size * LOCK_BADGE_OFFSET.x, item.y + item.size * LOCK_BADGE_OFFSET.y);
+            mark.style.fontSize = lockBadge.fontSize;
+            mark.position.set(item.x, item.y + lockBadge.y);
         }
         refreshLockMarks(store.get().discoveryCount);
     }
@@ -732,6 +880,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const radius = brushRadius();
         sim.paint(cx, cy, ink.element, radius, strength);
         if (mirror) sim.paint(SIM_WIDTH - 1 - cx, cy, ink.element, radius, strength);
+        sheetDirty = true;
     }
 
     function stampLine(ax: number, ay: number, bx: number, by: number): void {
@@ -787,6 +936,16 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             refusals[slot] = 1;
             inkAudio.play("deny");
             void runtimeServices.haptic("warning");
+            // Tapping a bottle you cannot have is the clearest statement of
+            // intent in the game. If it is the *next* one and a loan is on
+            // offer, answer with the offer instead of only a number — the
+            // shelf still arrives in the order the game intends, because only
+            // ever the next bottle can be borrowed.
+            const next = nextInkUnlock(store.get().discoveryCount);
+            if (next?.slot === slot && borrowAvailability().visible) {
+                store.patch({ borrowOffer: slot });
+                return;
+            }
             store.patch({ toast: `${ink.unlockAt} discoveries to open this one` });
             return;
         }
@@ -819,7 +978,128 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         void saveSystem.flush();
     }
 
+    /**
+     * Compose the sheet into a small JPEG for the Folio.
+     *
+     * Deliberately not a Pixi extract: WebGPU readback is async, WebGL needs
+     * `preserveDrawingBuffer`, and the cell buffers already live on the CPU in
+     * `simTexture`. A 2D canvas composite of paper colour × mark (+ glow) is
+     * synchronous, renderer-independent, and safe to run even mid-teardown.
+     * Returns null for a sheet without enough work on it to be worth keeping.
+     */
+    function captureSheetImage(): string | null {
+        if (sim.liveCount < 140) return null;
+        try {
+            const style = paperStyle(currentPaper);
+            const cellCanvas = document.createElement("canvas");
+            cellCanvas.width = SIM_WIDTH;
+            cellCanvas.height = SIM_HEIGHT;
+            const cellContext = cellCanvas.getContext("2d");
+            if (!cellContext) return null;
+
+            // putImageData expects straight alpha; the plate is premultiplied.
+            const unpremultiply = (source: Uint8Array): ImageData => {
+                const image = cellContext.createImageData(SIM_WIDTH, SIM_HEIGHT);
+                const out = image.data;
+                for (let i = 0; i < source.length; i += 4) {
+                    const alpha = source[i + 3] ?? 0;
+                    if (alpha === 0) continue;
+                    out[i] = Math.min(255, (((source[i] ?? 0) * 255) / alpha) | 0);
+                    out[i + 1] = Math.min(255, (((source[i + 1] ?? 0) * 255) / alpha) | 0);
+                    out[i + 2] = Math.min(255, (((source[i + 2] ?? 0) * 255) / alpha) | 0);
+                    out[i + 3] = alpha;
+                }
+                return image;
+            };
+
+            const scale = 3;
+            const output = document.createElement("canvas");
+            output.width = SIM_WIDTH * scale;
+            output.height = SIM_HEIGHT * scale;
+            const context = output.getContext("2d");
+            if (!context) return null;
+            context.fillStyle = style.base;
+            context.fillRect(0, 0, output.width, output.height);
+            context.imageSmoothingEnabled = true;
+
+            cellContext.putImageData(unpremultiply(simTexture.markPixels), 0, 0);
+            // Same compositing the live page uses: pigment multiplies into
+            // light paper and screens onto dark.
+            context.globalCompositeOperation = style.inkBlend === "screen" ? "screen" : "multiply";
+            context.drawImage(cellCanvas, 0, 0, output.width, output.height);
+
+            cellContext.clearRect(0, 0, SIM_WIDTH, SIM_HEIGHT);
+            cellContext.putImageData(unpremultiply(simTexture.glowPixels), 0, 0);
+            context.globalCompositeOperation = "lighter";
+            context.drawImage(cellCanvas, 0, 0, output.width, output.height);
+
+            return output.toDataURL("image/jpeg", 0.7);
+        } catch (error) {
+            // A failed capture loses a gallery entry, never the tear itself.
+            console.warn("[scene] sheet capture failed", error);
+            return null;
+        }
+    }
+
+    /** Keep the sheet in the Folio if it has unkept work on it. */
+    function captureToFolio(): void {
+        if (!sheetDirty) return;
+        const image = captureSheetImage();
+        if (image) folio.record(image);
+        sheetDirty = false;
+    }
+
+    /**
+     * The sheet's furniture: one to three thin basalt ledges printed into the
+     * upper page before the player touches it.
+     *
+     * Gravity drags everything to the bottom sixth of a tall sheet, so the
+     * upper two-thirds were dead space no pour could ever occupy for long.
+     * A printed ledge is something to build weather over, drip wax onto, and
+     * pool rain against — the upturned lips make each one a shallow basin.
+     * It is ordinary basalt: the eraser removes it, acid opens it, and it
+     * counts honestly toward the stir. Deterministic from the sheet seed; the
+     * very first sheet stays blank so the opening page is the player's alone,
+     * and one sheet in four arrives clean for the same reason.
+     */
+    function printFurniture(): void {
+        if (store.get().pagesTorn === 0) return;
+        // `^` yields a SIGNED 32-bit value and NoiseRandom rejects negatives.
+        const random = new NoiseRandom((sheetSeed ^ 0x5afe_c0de) >>> 0, 0);
+        // One sheet in four arrives clean — except the first torn sheet, which
+        // always shows the mechanic. The seed sequence is deterministic, so a
+        // blank roll here would hide furniture from every player's second page.
+        if (store.get().pagesTorn > 1 && random.float(0, 1) < 0.25) return;
+
+        const bands: ReadonlyArray<readonly [number, number]> = [
+            [0.16, 0.28],
+            [0.34, 0.46],
+            [0.52, 0.62],
+        ];
+        let printed = 0;
+        for (const [top, bottom] of bands) {
+            // Each band prints independently, and the middle one is forced if
+            // the dice left the sheet bare — "furniture" must mean furniture.
+            const wanted = random.float(0, 1) < 0.55;
+            const isLastChance = printed === 0 && bottom > 0.6;
+            if (!wanted && !isLastChance) continue;
+            printed++;
+
+            const y = Math.round(SIM_HEIGHT * random.float(top, bottom));
+            const widthCells = Math.round(SIM_WIDTH * random.float(0.2, 0.42));
+            const x0 = Math.round(random.float(0.06, 0.94) * (SIM_WIDTH - widthCells));
+            for (let x = x0; x <= x0 + widthCells; x++) {
+                sim.etch(x, y, BASALT);
+                sim.etch(x, y + 1, BASALT);
+            }
+            // The lips: a one-cell rise at each end, so the ledge holds water.
+            sim.etch(x0, y - 1, BASALT);
+            sim.etch(x0 + widthCells, y - 1, BASALT);
+        }
+    }
+
     function tearOffSheet(): void {
+        captureToFolio();
         // Snapshot what is being torn away so it can fly off the desk, then
         // give the next sheet a genuinely different grain and border.
         tornTexture?.destroy(true);
@@ -829,6 +1109,9 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         tearProgress = 1;
 
         sim.clear();
+        // A new sheet is a new shelf: a borrowed bottle goes back.
+        endBorrow();
+        if (!isInkUnlocked(selected, store.get().discoveryCount)) selectInk(0);
         resetSheetReactions();
         sheetSeed = sheetRandom.nextUint();
         lastPaperWidth = 0;
@@ -837,6 +1120,9 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         void runtimeServices.haptic("medium");
         const current = store.get();
         store.patch({ pagesTorn: current.pagesTorn + 1, toast: t("ToastSheetTorn") });
+        // After the count and the seed both roll: the furniture belongs to the
+        // NEW sheet, and its "first sheet stays blank" gate reads pagesTorn.
+        printFurniture();
         runtimeServices.track("sheet_torn", { sheets: current.pagesTorn + 1, discoveries: current.discoveryCount });
         void saveSystem.flush();
     }
@@ -871,8 +1157,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         lastCellX = brushCellX;
         lastCellY = brushCellY;
         stamp(brushCellX, brushCellY, 1);
-        if (INKS[selected]?.name === "EMBER") inkAudio.fizz();
-        else inkAudio.scratch(3);
+        inkAudio.stroke(INKS[selected]?.name === "EMBER" ? "fizz" : "nib", 3);
         try {
             app.canvas.setPointerCapture(event.pointerId);
         } catch {
@@ -897,8 +1182,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             lastCellX = cellX;
             lastCellY = cellY;
             if (travelled > 1) {
-                if (INKS[selected]?.name === "EMBER") inkAudio.fizz();
-                else inkAudio.scratch(travelled);
+                inkAudio.stroke(INKS[selected]?.name === "EMBER" ? "fizz" : "nib", travelled);
             }
         }
         brushCellX = cellX;
@@ -922,6 +1206,8 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (store.get().overlay !== "none") return;
         const key = event.key;
+        // `1`-`0` reach the first ten; the `qwertyui` row continues along the
+        // shelf's second row, which is where those bottles physically are.
         if (key >= "1" && key <= "9") {
             selectInk(key.charCodeAt(0) - 49);
             event.preventDefault();
@@ -929,6 +1215,12 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         }
         if (key === "0") {
             selectInk(9);
+            event.preventDefault();
+            return;
+        }
+        const overflow = "qwertyui".indexOf(key.toLowerCase());
+        if (overflow >= 0 && key.length === 1) {
+            selectInk(10 + overflow);
             event.preventDefault();
             return;
         }
@@ -1011,10 +1303,17 @@ export function createPageScene(app: Application, stage: Stage): Scene {
 
     const burstRandom = new NoiseRandom(0x3b0f_1c77, 0);
 
+    /** A simulation cell's centre, in design units on the page. */
+    function cellPoint(cell: number): { x: number; y: number } {
+        return {
+            x: page.x + ((cell % SIM_WIDTH) + 0.5) * (page.w / SIM_WIDTH),
+            y: page.y + (Math.floor(cell / SIM_WIDTH) + 0.5) * (page.h / SIM_HEIGHT),
+        };
+    }
+
     function burstAtCell(cell: number, colour: number, count: number): void {
         if (store.get().reducedMotion) return;
-        const cx = page.x + ((cell % SIM_WIDTH) + 0.5) * (page.w / SIM_WIDTH);
-        const cy = page.y + (Math.floor(cell / SIM_WIDTH) + 0.5) * (page.h / SIM_HEIGHT);
+        const { x: cx, y: cy } = cellPoint(cell);
         for (let index = 0; index < count; index++) {
             const angle = burstRandom.float(0, Math.PI * 2);
             const speed = burstRandom.float(30, 130);
@@ -1051,10 +1350,21 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     // ---------------------------------------------------------------- toasts
 
     function updateToasts(dt: number): void {
+        const reduced = store.get().reducedMotion;
         for (const event of takeCelebrations()) {
+            const startsBurst = toasts.length === 0;
             toasts.push({ ...event, age: 0 });
             if (event.kind === "unlock") inkAudio.play("unlock");
-            if (event.cell !== null) burstAtCell(event.cell, event.colour, 18);
+            if (event.cell !== null) {
+                burstAtCell(event.cell, event.colour, 18);
+                if (!reduced) {
+                    const point = cellPoint(event.cell);
+                    bloomX = point.x;
+                    bloomY = point.y;
+                    bloomAge = 0;
+                }
+            }
+            if (event.kind === "discovery" && startsBurst && !reduced) celebrationHoldMs = 420;
             celebration = 1;
             celebrationColour = event.colour;
         }
@@ -1070,8 +1380,6 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             toasts.shift();
             return;
         }
-
-        const reduced = store.get().reducedMotion;
         const entered = Math.min(1, current.age / (MOTION.revealMs / 1_000));
         const eased = 1 - (1 - entered) ** 3;
         const fade = current.age > duration - 0.3 ? (duration - current.age) / 0.3 : Math.min(1, entered * 2.2);
@@ -1079,14 +1387,19 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         const label = current.title;
         toastTitle.text = label;
         toastNote.text = current.note;
-        toastTitle.style.fontSize = Math.max(17, page.w * 0.045);
-        toastNote.style.fontSize = Math.max(12, page.w * 0.03);
+        toastTitle.style.fontSize = Math.max(42, page.w * 0.072);
+        toastNote.style.fontSize = Math.max(28, page.w * 0.048);
+        toastStamp.text =
+            current.kind === "discovery" && current.ordinal !== null ? `№ ${current.ordinal} / ${DISCOVERY_COUNT}` : "";
+        toastStamp.visible = toastStamp.text.length > 0;
+        toastStamp.style.fontSize = Math.max(22, page.w * 0.037);
 
         const padding = 20;
         const iconWidth = 44;
+        const stampWidth = toastStamp.visible ? toastStamp.width + 22 : 0;
         const cardWidth = Math.min(
             stage.designWidth() - 32,
-            Math.max(toastTitle.width, toastNote.width) + padding * 2 + iconWidth,
+            Math.max(toastTitle.width + stampWidth, toastNote.width) + padding * 2 + iconWidth,
         );
         const cardHeight = toastTitle.height + toastNote.height + padding * 1.4;
         const centreX = stage.designWidth() / 2;
@@ -1120,6 +1433,9 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         toastTitle.position.set(-cardWidth / 2 + iconWidth + 4, 2);
         toastNote.anchor.set(0, 0);
         toastNote.position.set(-cardWidth / 2 + iconWidth + 4, 4);
+        // The stamp shares the title's baseline, pressed against the far edge.
+        toastStamp.anchor.set(1, 1);
+        toastStamp.position.set(cardWidth / 2 - padding * 0.75, 0);
     }
 
     /**
@@ -1132,6 +1448,29 @@ export function createPageScene(app: Application, stage: Stage): Scene {
      */
     function updateCelebration(dt: number): void {
         flashGraphics.clear();
+
+        // The bloom: a ring rolling out from the exact cell that reacted,
+        // so the eye is led to *where* it happened, not just that it did.
+        if (bloomAge >= 0) {
+            bloomAge += dt;
+            const life = 0.7;
+            const progress = bloomAge / life;
+            if (progress >= 1) {
+                bloomAge = -1;
+            } else {
+                const eased = 1 - (1 - progress) ** 2;
+                const radius = 14 + eased * page.w * 0.24;
+                flashGraphics.circle(bloomX, bloomY, radius);
+                flashGraphics.stroke({
+                    width: 4 * (1 - progress) + 1.5,
+                    color: celebrationColour,
+                    alpha: (1 - progress) * 0.55,
+                });
+                flashGraphics.circle(bloomX, bloomY, radius * 0.62);
+                flashGraphics.stroke({ width: 2.5, color: GOLD_GLOW, alpha: (1 - progress) * 0.4 });
+            }
+        }
+
         if (celebration <= 0) return;
         celebration = Math.max(0, celebration - dt * (store.get().reducedMotion ? 4 : 1.9));
         const strength = celebration * celebration;
@@ -1175,6 +1514,15 @@ export function createPageScene(app: Application, stage: Stage): Scene {
             mirror = wantsMirror;
             layout();
         }
+
+        // A loan is granted from React, which cannot reach the scene's own
+        // selection. Put the bottle in the player's hand: they paid a video
+        // for it, and making them tap it a second time reads as the offer
+        // having failed.
+        if (current.borrowedInk !== null && current.borrowedInk !== lastBorrowedInk) {
+            selectInk(current.borrowedInk);
+        }
+        lastBorrowedInk = current.borrowedInk;
     }
 
     function tick(): void {
@@ -1186,6 +1534,13 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         syncFromStore();
 
         accumulatorMs += deltaMs;
+        // The held beat: while a discovery is being savoured the simulation
+        // stands still, and the pause is swallowed rather than banked — it
+        // must not come back as a lurch of catch-up steps.
+        if (celebrationHoldMs > 0) {
+            celebrationHoldMs = Math.max(0, celebrationHoldMs - deltaMs);
+            accumulatorMs = 0;
+        }
         let steps = 0;
         while (accumulatorMs >= SIM_STEP_MS && steps < MAX_CATCHUP_STEPS) {
             if (painting) stamp(brushCellX, brushCellY, 1);
@@ -1211,6 +1566,29 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         }
 
         bleedSprite.visible = bleedEnabled;
+
+        // The stir check is a census over the whole grid, so it runs on a
+        // half-second cadence rather than every step; the flag only crosses to
+        // React when it flips.
+        stirCheckMs += deltaMs;
+        if (steps > 0 && stirCheckMs >= 450) {
+            stirCheckMs = 0;
+            sim.countElements(elementCensus);
+            const stirring = pageStirs(DISCOVERIES, sim.found, elementCensus);
+            if (stirring !== stirActive) {
+                stirActive = stirring;
+                store.patch({ pageStirring: stirring });
+            }
+        }
+        stirLevel += ((stirActive ? 1 : 0) - stirLevel) * Math.min(1, dt * 1.6);
+        if (stirLevel > 0.005) {
+            stirPhase += dt;
+            // Reduced motion holds the shimmer steady instead of breathing it.
+            const breath = store.get().reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(stirPhase * 2.2);
+            stirGraphics.alpha = stirLevel * (0.05 + 0.13 * breath);
+        } else {
+            stirGraphics.alpha = 0;
+        }
 
         if (tearProgress > 0) {
             tearProgress = Math.max(0, tearProgress - dt * (store.get().reducedMotion ? 4.5 : 1.7));
@@ -1276,9 +1654,61 @@ export function createPageScene(app: Application, stage: Stage): Scene {
         }));
     });
 
+    // And where the sheet is, so scripted strokes land on paper rather than on
+    // whatever the layout happened to move under them.
+    publishPageRect(() => {
+        const scale = stage.scale() || 1;
+        let bottom = shelf.top;
+        for (const item of shelfItems) bottom = Math.max(bottom, item.y + item.slotH / 2);
+        return {
+            x: page.x * scale,
+            y: page.y * scale,
+            width: page.w * scale,
+            height: page.h * scale,
+            shelfTop: shelf.top * scale,
+            shelfContentBottom: bottom * scale,
+            safeBottom: readSafeInsets().bottom,
+        };
+    });
+
+    // And the lock badges, pill and number both, so "the digits overlap the
+    // rim" is arithmetic rather than something a person has to notice.
+    publishLockBadges(() => {
+        const scale = stage.scale() || 1;
+        const badges = [];
+        for (const item of shelfItems) {
+            if (item.kind !== "ink") continue;
+            const mark = lockMarks[item.index];
+            if (!mark?.visible) continue;
+            badges.push({
+                index: item.index,
+                pill: {
+                    x: item.x * scale,
+                    y: (item.y + lockBadge.y) * scale,
+                    width: lockBadge.width * scale,
+                    height: lockBadge.height * scale,
+                },
+                text: {
+                    x: mark.x * scale,
+                    y: mark.y * scale,
+                    width: mark.width * scale,
+                    height: mark.height * scale,
+                },
+            });
+        }
+        return badges;
+    });
+
+    publishSimProbe(() => ({ tick: sim.tick, liveCount: sim.liveCount }));
+
+    // Continuous page sound is gated on the sheet existing, not on any caller
+    // remembering to wind it down. See `inkAudio.silencePage`.
+    inkAudio.openPage();
+
     const unsubscribeResize = stage.onResize(layout);
     layout();
     rebuildPaper();
+    printFurniture();
     simTexture.update(sim, bleedEnabled);
     app.ticker.add(tick);
     runtimeServices.funnel(2, "page_opened", "inkbloom_first_session", 1);
@@ -1286,7 +1716,19 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     return {
         destroy() {
             destroyed = true;
+            // Before anything else: the page voice is a permanent looping
+            // source, so tearing down Pixi does not stop it. Leaving this until
+            // after the renderer teardown risks an exception skipping it.
+            inkAudio.silencePage();
+            // Leaving the page destroys the sheet as surely as tearing it, so
+            // it gets the same chance to be kept. Purely CPU-side — safe here.
+            captureToFolio();
+            // The stir is a fact about a sheet that no longer exists.
+            if (stirActive) store.patch({ pageStirring: false });
             publishShelfSlots(null);
+            publishPageRect(null);
+            publishLockBadges(null);
+            publishSimProbe(null);
             app.ticker.remove(tick);
             unsubscribeResize();
             app.canvas.removeEventListener("pointerdown", handlePointerDown);

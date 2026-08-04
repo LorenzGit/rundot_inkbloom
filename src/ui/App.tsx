@@ -9,6 +9,7 @@
  */
 import { lazy, Suspense, useEffect } from "react";
 import { store, useStore } from "../state/store.ts";
+import BorrowInkSheet from "./BorrowInkSheet.tsx";
 import GameCanvas from "../game/GameCanvas.tsx";
 import LoadingScreen from "./LoadingScreen.tsx";
 import TitleScreen from "./TitleScreen.tsx";
@@ -17,19 +18,28 @@ import FieldNotesScreen from "./FieldNotesScreen.tsx";
 import KitScreen from "./KitScreen.tsx";
 import SettingsScreen from "./SettingsScreen.tsx";
 import RecordScreen from "./RecordScreen.tsx";
+import ColophonScreen from "./ColophonScreen.tsx";
 import { applyRunSafeArea } from "../sdk/runSdk.ts";
 import { t } from "../systems/localization.ts";
+import { inkAudio } from "../audio/inkAudio.ts";
+import { runtimeServices } from "../systems/runtimeServices.ts";
 
 const DevelopmentTools = import.meta.env.DEV ? lazy(() => import("../dev/DevelopmentTools.tsx")) : null;
 
 function useOrientationSafeArea(): void {
     useEffect(() => {
         const refresh = () => applyRunSafeArea();
+        refresh();
         window.addEventListener("orientationchange", refresh);
         window.addEventListener("resize", refresh);
+        // iOS reports env() insets late on first paint / after toolbar collapse.
+        window.visualViewport?.addEventListener("resize", refresh);
+        window.visualViewport?.addEventListener("scroll", refresh);
         return () => {
             window.removeEventListener("orientationchange", refresh);
             window.removeEventListener("resize", refresh);
+            window.visualViewport?.removeEventListener("resize", refresh);
+            window.visualViewport?.removeEventListener("scroll", refresh);
         };
     }, []);
 }
@@ -80,10 +90,21 @@ export default function App() {
                     <GameCanvas />
                     <PageHeader />
                     <PlayOverlay />
+                    <BorrowInkSheet />
+                    <ColophonSlot />
                     {paused && (
-                        <div className="pause-veil" role="status">
-                            {t("Paused")}
-                        </div>
+                        <button
+                            type="button"
+                            className="pause-veil"
+                            onClick={() => {
+                                store.patch({ paused: false });
+                                inkAudio.setPaused(false);
+                                runtimeServices.resume();
+                            }}
+                        >
+                            <strong>{t("Paused")}</strong>
+                            <span>TAP TO RESUME</span>
+                        </button>
                     )}
                 </>
             )}
@@ -91,6 +112,11 @@ export default function App() {
             <DevelopmentToolsSlot />
         </div>
     );
+}
+
+function ColophonSlot() {
+    const pending = useStore((state) => state.colophonPending);
+    return pending ? <ColophonScreen /> : null;
 }
 
 function Toast() {

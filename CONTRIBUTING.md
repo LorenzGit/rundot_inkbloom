@@ -25,8 +25,7 @@ npm run check
 That runs formatting, lint, the invariant suite, the headless simulation proof,
 the public-repository audit, and both production builds.
 
-If you touched the simulation or the ink colour rules, also re-render the store
-tile so it still matches the game:
+If you replaced key art under `src/assets/art/`, re-encode the public files:
 
 ```sh
 npm run thumbnail

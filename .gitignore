@@ -21,11 +21,12 @@ rundot-session*
 player-snapshot*
 campaign-state*
 
-# Test and QA output
+# Test and QA output. `screenshots/` is anchored to the repo root on purpose:
+# unanchored it also swallows docs/screenshots, which the README links to.
 coverage/
 playwright-report/
 test-results/
-screenshots/
+/screenshots/
 tmp/
 *.log
 npm-debug.log*

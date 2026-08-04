@@ -9,6 +9,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { DEFAULT_PAPER, type PaperId } from "../game/constants.ts";
+import type { FolioEntry } from "../systems/folio.ts";
 
 /** Full-screen destinations reachable from the title. */
 export type MenuScreen = "title" | "shop" | "settings" | "stats";
@@ -31,6 +32,12 @@ export interface AppState {
     /** Sheets torn off, and marks made — the player's record. */
     pagesTorn: number;
     strokes: number;
+    /** Kept images of torn sheets, newest first. Persisted under its own key. */
+    folio: FolioEntry[];
+    /** The 60/60 ceremony has been shown. Saved, so it happens exactly once. */
+    colophonSeen: boolean;
+    /** The sixtieth secret just landed; the colophon should appear. Transient. */
+    colophonPending: boolean;
     /** Currently selected shelf slot. */
     selectedInk: number;
     /** Large brush toggle. */
@@ -57,6 +64,27 @@ export interface AppState {
     ownsKit: boolean;
     paper: PaperId;
     kitOfferSeen: boolean;
+    /**
+     * Nudges bought in a pot and not yet spent.
+     *
+     * A cache of the server's consumable entitlement quantity, never a source
+     * of truth: it is written only from a host reply, and a spend is not
+     * allowed to happen until the server has confirmed the consume.
+     */
+    potNudges: number;
+
+    /**
+     * A shelf slot on loan from a rewarded video, for this sheet only.
+     *
+     * Deliberately absent from the save. A loan that survived a reinstall
+     * would be an ink the player owns, which is not what was offered.
+     */
+    borrowedInk: number | null;
+    /** Slot the borrow offer is open for, or null when it is closed. */
+    borrowOffer: number | null;
+    /** Daily loan budget, keyed to the trusted day so a clock change cannot reset it. */
+    borrowDay: string | null;
+    borrowsToday: number;
 
     /** Player settings mirrored from save. */
     musicEnabled: boolean;
@@ -69,6 +97,15 @@ export interface AppState {
     reducedMotion: boolean;
     locale: string;
     quality: "high" | "low";
+
+    /**
+     * True while the current sheet holds every element of some unfound secret.
+     *
+     * Written by the scene when the fact flips, never per frame. Deliberately
+     * not saved: it is a property of the sheet, and the sheet dies with the
+     * session.
+     */
+    pageStirring: boolean;
 
     /** One-line transient message shown over everything. */
     toast: string | null;
@@ -91,6 +128,9 @@ let state: AppState = {
     discoveryCount: 0,
     pagesTorn: 0,
     strokes: 0,
+    folio: [],
+    colophonSeen: false,
+    colophonPending: false,
     selectedInk: 0,
     largeBrush: false,
     mirrorBrush: false,
@@ -107,6 +147,11 @@ let state: AppState = {
     promptStreak: 0,
 
     ownsKit: false,
+    potNudges: 0,
+    borrowedInk: null,
+    borrowOffer: null,
+    borrowDay: null,
+    borrowsToday: 0,
     paper: DEFAULT_PAPER,
     kitOfferSeen: false,
 
@@ -120,6 +165,8 @@ let state: AppState = {
     reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     locale: "English",
     quality: "high",
+
+    pageStirring: false,
 
     toast: null,
 

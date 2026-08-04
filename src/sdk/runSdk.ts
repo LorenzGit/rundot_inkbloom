@@ -88,32 +88,89 @@ export interface RunSafeArea {
 
 const ZERO_SAFE_AREA: Readonly<RunSafeArea> = Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 });
 
+function normalizeSafeArea(area: Partial<RunSafeArea> | null | undefined): RunSafeArea {
+    return {
+        top: Math.max(0, Number(area?.top) || 0),
+        right: Math.max(0, Number(area?.right) || 0),
+        bottom: Math.max(0, Number(area?.bottom) || 0),
+        left: Math.max(0, Number(area?.left) || 0),
+    };
+}
+
+/**
+ * Measure browser / ViewDeck insets as resolved CSS pixels.
+ *
+ * Reading `--safe-top` via getComputedStyle returns the unresolved
+ * `env(...)` token when nothing has published a pixel value, and
+ * `parseFloat` then yields 0 — so Pixi and any other JS consumer would
+ * ignore a real notch. Probe a throwaway element instead.
+ */
+function measureEnvSafeArea(): RunSafeArea {
+    if (typeof document === "undefined" || !document.body) return { ...ZERO_SAFE_AREA };
+    const probe = document.createElement("div");
+    probe.style.cssText =
+        "position:absolute;visibility:hidden;pointer-events:none;" +
+        "padding-top:var(--viewdeck-safe-area-inset-top,env(safe-area-inset-top,0px));" +
+        "padding-right:var(--viewdeck-safe-area-inset-right,env(safe-area-inset-right,0px));" +
+        "padding-bottom:var(--viewdeck-safe-area-inset-bottom,env(safe-area-inset-bottom,0px));" +
+        "padding-left:var(--viewdeck-safe-area-inset-left,env(safe-area-inset-left,0px))";
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    const read = (value: string): number => Math.max(0, Number.parseFloat(value) || 0);
+    const area = {
+        top: read(style.paddingTop),
+        right: read(style.paddingRight),
+        bottom: read(style.paddingBottom),
+        left: read(style.paddingLeft),
+    };
+    probe.remove();
+    return area;
+}
+
 export function getRunSafeArea(): Readonly<RunSafeArea> {
     if (!_ready) return ZERO_SAFE_AREA;
     try {
-        const area = RundotGameAPI.system.getSafeArea();
-        return {
-            top: Math.max(0, Number(area.top) || 0),
-            right: Math.max(0, Number(area.right) || 0),
-            bottom: Math.max(0, Number(area.bottom) || 0),
-            left: Math.max(0, Number(area.left) || 0),
-        };
+        return normalizeSafeArea(RundotGameAPI.system.getSafeArea());
     } catch {
         return ZERO_SAFE_AREA;
     }
 }
 
-/** Publish host insets as CSS variables without coupling UI code to the SDK. */
+/**
+ * Inset the layout should actually respect.
+ *
+ * 1. Real attached RUN host → host only (some hosts already reserve chrome;
+ *    blending browser env would double-pad).
+ * 2. Otherwise prefer the page's own env / ViewDeck insets when they report
+ *    anything. The SDK mock defaults to top/bottom 10, which is far too small
+ *    for a real iPhone status bar and used to stomp real browser values.
+ * 3. When the environment is silent (desktop dev), fall back to the host/mock
+ *    reading so local chrome still has a little breathing room.
+ */
+export function getEffectiveSafeArea(): Readonly<RunSafeArea> {
+    const host = getRunSafeArea();
+    let mock = false;
+    try {
+        mock = RundotGameAPI.isMock();
+    } catch {
+        mock = false;
+    }
+    if (_ready && !mock) return host;
+    const env = measureEnvSafeArea();
+    if (env.top > 0 || env.right > 0 || env.bottom > 0 || env.left > 0) return env;
+    return host;
+}
+
+/** Publish resolved pixel insets as CSS variables without coupling UI code to the SDK. */
 export function applyRunSafeArea(): Readonly<RunSafeArea> {
-    const area = getRunSafeArea();
     const root = document.documentElement;
     if (import.meta.env.DEV) {
         const count = Number(root.dataset.safeAreaRefreshCount ?? 0);
         root.dataset.safeAreaRefreshCount = String(count + 1);
     }
-    // Outside RUN, leave the stylesheet's env(safe-area-inset-*) fallbacks
-    // intact. Publishing zero-valued host data would erase real browser insets.
-    if (!_ready) return area;
+    const area = getEffectiveSafeArea();
+    // Always publish resolved pixels so Pixi (`readSafeInsets`) and CSS share
+    // one number. Leaving bare env() tokens in --safe-* makes parseFloat yield 0.
     root.style.setProperty("--safe-top", `${area.top}px`);
     root.style.setProperty("--safe-right", `${area.right}px`);
     root.style.setProperty("--safe-bottom", `${area.bottom}px`);
@@ -344,20 +401,31 @@ export async function rearmLocalNotification(input: {
 
 export type VerifiedActionResult = "verified" | "unavailable" | "cancelled" | "failed";
 
+let hostOverlayCount = 0;
+
+export function hostOverlayInFlight(): boolean {
+    return hostOverlayCount > 0;
+}
+
+export async function withHostOverlay<T>(run: () => Promise<T>): Promise<T> {
+    hostOverlayCount += 1;
+    if (hostOverlayCount === 1) inkAudio.setHostOverlayVisible(true);
+    try {
+        return await run();
+    } finally {
+        hostOverlayCount -= 1;
+        if (hostOverlayCount === 0) inkAudio.setHostOverlayVisible(false);
+    }
+}
+
 export async function showVerifiedRewardedAd(id: string, name: string): Promise<VerifiedActionResult> {
     if (!capabilities.ads) return "unavailable";
     try {
         const ready = await withTimeout(RundotGameAPI.ads.isRewardedAdReadyAsync(), 2_000, "ads.ready");
         if (!ready) return "unavailable";
-        inkAudio.setAdVisible(true);
-        let completed = false;
-        try {
-            // Do not timeout a user-mediated overlay: the audio interruption
-            // must last until the host tells us it has actually closed.
-            completed = await RundotGameAPI.ads.showRewardedAdAsync({ adDisplayId: id, adDisplayName: name });
-        } finally {
-            inkAudio.setAdVisible(false);
-        }
+        const completed = await withHostOverlay(() =>
+            RundotGameAPI.ads.showRewardedAdAsync({ adDisplayId: id, adDisplayName: name }),
+        );
         return completed === true ? "verified" : "cancelled";
     } catch {
         return "failed";
@@ -373,13 +441,9 @@ export async function showVerifiedInterstitialAd(id: string, name: string): Prom
             "ads.interstitial.ready",
         );
         if (!ready) return "unavailable";
-        inkAudio.setAdVisible(true);
-        let displayed = false;
-        try {
-            displayed = await RundotGameAPI.ads.showInterstitialAd({ adDisplayId: id, adDisplayName: name });
-        } finally {
-            inkAudio.setAdVisible(false);
-        }
+        const displayed = await withHostOverlay(() =>
+            RundotGameAPI.ads.showInterstitialAd({ adDisplayId: id, adDisplayName: name }),
+        );
         return displayed === true ? "verified" : "unavailable";
     } catch {
         return "failed";
@@ -389,9 +453,73 @@ export async function showVerifiedInterstitialAd(id: string, name: string): Prom
 export async function purchaseVerifiedShopItem(itemId: string, idempotencyKey: string): Promise<VerifiedActionResult> {
     if (!capabilities.purchases || !sdkNamespace("shop")) return "unavailable";
     try {
-        const result = await withTimeout(RundotGameAPI.shop.purchase(itemId, idempotencyKey), 90_000, "shop.purchase");
+        const result = await withHostOverlay(() => RundotGameAPI.shop.purchase(itemId, idempotencyKey));
         return result.success === true ? "verified" : "failed";
     } catch {
+        return "failed";
+    }
+}
+
+export type ShareImageResult = "shared" | "cancelled" | "unavailable" | "failed";
+
+/**
+ * Share a locally-rendered image through the host share sheet.
+ *
+ * `social.shareFileAsync` is the host's native share UX (beta in 5.24, so it
+ * is feature-detected with `canShareFileAsync` first). Outside the host the
+ * browser's own `navigator.share` is tried, and failing that the image is
+ * offered as a plain download — every surface gets *some* way to keep the
+ * sheet. The share sheet is a host overlay, so audio ducks like any other.
+ */
+export async function shareImageFile(input: {
+    blob: Blob;
+    filename: string;
+    title: string;
+    text: string;
+}): Promise<ShareImageResult> {
+    if (_ready && sdkNamespace("social")) {
+        try {
+            const support = await withTimeout(RundotGameAPI.social.canShareFileAsync(), 2_000, "social.canShareFile");
+            if (support.supported) {
+                const result = await withHostOverlay(() =>
+                    RundotGameAPI.social.shareFileAsync({
+                        data: input.blob,
+                        filename: input.filename,
+                        mimeType: "image/jpeg",
+                        title: input.title,
+                        text: input.text,
+                    }),
+                );
+                return result.cancelled ? "cancelled" : "shared";
+            }
+        } catch (error) {
+            console.warn("[runSdk] host share failed", error);
+            return "failed";
+        }
+    }
+
+    try {
+        const file = new File([input.blob], input.filename, { type: "image/jpeg" });
+        if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file], title: input.title, text: input.text });
+            return "shared";
+        }
+    } catch (error) {
+        // An abort is the user closing the sheet, not a failure.
+        if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+        console.warn("[runSdk] web share failed", error);
+    }
+
+    try {
+        const url = URL.createObjectURL(input.blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = input.filename;
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        return "shared";
+    } catch (error) {
+        console.warn("[runSdk] download fallback failed", error);
         return "failed";
     }
 }
