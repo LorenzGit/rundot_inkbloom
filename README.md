@@ -22,7 +22,8 @@ Built on **PixiJS 8** with a WebGPU-first renderer (automatic WebGL fallback),
 | | |
 | --- | --- |
 | **Game ID** | `gCoSWVsu7MchgqeaLNrM` |
-| **Private play** | https://w.run/u/gCoSWVsu7MchgqeaLNrM/private |
+| **Version** | app `0.1.1` · RUN `1.0.1` |
+| **Play** | https://w.run/u/gCoSWVsu7MchgqeaLNrM/review (public after review) |
 | **Orientation** | Portrait |
 
 ---

@@ -3,15 +3,6 @@
   "relativePathToDistFolder": "dist",
   "usesPreloader": false,
   "orientation": "portrait",
-  "keywords": [
-    "sandbox",
-    "falling sand",
-    "painting",
-    "discovery",
-    "relaxing",
-    "physics",
-    "creative",
-    "puzzle"
-  ],
+  "keywords": ["sandbox", "falling sand", "painting", "discovery", "relaxing", "physics", "creative", "puzzle"],
   "kitId": null
 }

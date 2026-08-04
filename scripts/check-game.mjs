@@ -52,8 +52,14 @@ for (const relativePath of [...allSources, "index.html", "src/assets/strings.csv
 }
 
 const gameConfig = JSON.parse(read("game.config.prod.json"));
-expect(gameConfig.orientation === "Portrait", "game.config.prod.json must declare Portrait");
+expect(String(gameConfig.orientation).toLowerCase() === "portrait", "game.config.prod.json must declare Portrait");
 expect(Array.isArray(gameConfig.keywords) && gameConfig.keywords.length >= 4, "catalog keywords are required");
+expect(
+    typeof gameConfig.gameId === "string" &&
+        gameConfig.gameId.length > 0 &&
+        !gameConfig.gameId.startsWith("REPLACE_WITH_"),
+    "game.config.prod.json must carry a real gameId after rundot init",
+);
 
 // ----------------------------------------------------------------- randomness
 
@@ -108,7 +114,12 @@ expect(
 expect(/outcome !== "verified"/.test(monetization), "a rewarded nudge must only be granted on a verified host outcome");
 
 const platform = read("src/config/platform.ts");
-expect(/REPLACE_WITH_RUN_GAME_ID/.test(platform), "gameId placeholder must survive until `rundot init` runs");
+expect(
+    /gameId:\s*"gCoSWVsu7MchgqeaLNrM"/.test(platform) ||
+        (!/REPLACE_WITH_RUN_GAME_ID/.test(platform) && /gameId:\s*"[A-Za-z0-9]{10,}"/.test(platform)),
+    "platform.ts must carry the provisioned gameId (not a placeholder)",
+);
+expect(platform.includes(gameConfig.gameId), "platform.ts gameId must match game.config.prod.json");
 expect(/inkbloom_illuminators_kit/.test(platform), "the Kit product id must be self-authored and stable");
 
 expect(/inkbloom_pot_of_ink/.test(platform), "the pot product id must be self-authored and stable");

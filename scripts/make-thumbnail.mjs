@@ -50,7 +50,20 @@ requireFile(masters.thumbnail, "store thumbnail master");
 requireFile(masters.hero, "title hero master");
 
 // 512×512 JPEG for the RUN store tile.
-runSips(["-z", "512", "512", "-s", "format", "jpeg", "-s", "formatOptions", "88", masters.thumbnail, "--out", outputs.thumbnail]);
+runSips([
+    "-z",
+    "512",
+    "512",
+    "-s",
+    "format",
+    "jpeg",
+    "-s",
+    "formatOptions",
+    "88",
+    masters.thumbnail,
+    "--out",
+    outputs.thumbnail,
+]);
 
 // Title hero: keep master aspect, re-encode for a lean public file.
 runSips(["-s", "format", "jpeg", "-s", "formatOptions", "90", masters.hero, "--out", outputs.hero]);
