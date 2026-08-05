@@ -80,6 +80,7 @@ import { runtimeServices } from "../../systems/runtimeServices.ts";
 import { t } from "../../systems/localization.ts";
 import { NoiseRandom } from "../noiseRandom.ts";
 
+import { analytics, FIRST_PLAY_FUNNEL } from "../../systems/analytics/analyticsConfig.ts";
 export interface Scene {
     destroy(): void;
 }
@@ -1711,7 +1712,7 @@ export function createPageScene(app: Application, stage: Stage): Scene {
     printFurniture();
     simTexture.update(sim, bleedEnabled);
     app.ticker.add(tick);
-    runtimeServices.funnel(2, "page_opened", "inkbloom_first_session", 1);
+    analytics.funnelStep(FIRST_PLAY_FUNNEL, 2);
 
     return {
         destroy() {

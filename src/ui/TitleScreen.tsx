@@ -19,6 +19,7 @@ import { saveSystem } from "../systems/save.ts";
 import { t } from "../systems/localization.ts";
 import { kitOfferUnlocked } from "../systems/monetization.ts";
 
+import { analytics, FIRST_PLAY_FUNNEL } from "../systems/analytics/analyticsConfig.ts";
 /**
  * The hero.
  *
@@ -57,7 +58,7 @@ export default function TitleScreen() {
 
     const open = () =>
         void activate(() => {
-            runtimeServices.funnel(1, "title_opened", "inkbloom_first_session", 1);
+            analytics.funnelStep(FIRST_PLAY_FUNNEL, 1);
             store.patch({ phase: "playing", overlay: "none" });
             void saveSystem.flush();
         });

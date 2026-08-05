@@ -14,6 +14,12 @@ import { installBrowserQaContract } from "./qa/browserContract.ts";
 import { rolloverIfNeeded } from "./systems/dailyPrompt.ts";
 import "./styles/app.css";
 
+import { analytics } from "./systems/analytics/analyticsConfig.ts";
+import { resolveReturnLaunch, returnReminders } from "./systems/retention/retentionConfig.ts";
+// Fired at module scope, before any await: the only row a player who closes the
+// tab mid-load will ever produce. Buffered until markTransportReady() below.
+analytics.installErrorCapture();
+analytics.funnelStep("load", 1);
 /**
  * Boot sequence. The ORDER here matters — it's the pattern from a shipped RUN
  * game. Keep the numbered steps in this order; add your own work at the
@@ -23,10 +29,14 @@ async function boot() {
     // 1. SDK first. Nothing may call RundotGameAPI before this resolves.
     //    Resolves even if init fails (local dev outside the RUN host).
     await initSdk();
+    // The transport exists now — flush what boot recorded before this point.
+    analytics.markTransportReady();
+    analytics.funnelStep("load", 2);
     applyRunSafeArea();
 
     // 2. Restore versioned progress/settings before the first render.
     await saveSystem.load();
+    analytics.funnelStep("load", 3);
     document.documentElement.dataset.reducedMotion = String(store.get().reducedMotion);
     document.documentElement.dataset.quality = store.get().quality;
     restoreLocale();
@@ -85,6 +95,10 @@ async function boot() {
             runtimeServices.resume();
         },
         onSleep: () => {
+            analytics.sessionPause();
+            // Re-anchor the 24h nudge so it lands a day after the player actually
+            // stopped, not a day after install.
+            void returnReminders.refreshPrimary();
             store.patch({ paused: true });
             inkAudio.setPaused(true);
             void saveSystem.flush();
@@ -96,6 +110,8 @@ async function boot() {
             rolloverIfNeeded();
         },
         onQuit: () => {
+            analytics.sessionEnd();
+            void returnReminders.refreshPrimary();
             void saveSystem.flush();
         },
         onIdentityChanged: (event) => {
@@ -126,7 +142,16 @@ async function boot() {
     //    boot event, subscription status refresh. None of it should block or
     //    throw into this function.
     runtimeServices.bootstrap();
-    runtimeServices.funnel(0, "game_loaded", "inkbloom_first_session", 1);
+    // Boot reached a playable frame; everything after this is the first-run funnel.
+    analytics.funnelStep("load", 4);
+    // No first-play step here: this funnel's step 1 is `title_opened`, which the
+    // title screen owns. Boot only proves the app loaded, which the load funnel
+    // above already records.
+    analytics.sessionStart(true);
+    // Retention: arm the 24/48/72h cadence and attribute a notification-driven
+    // launch. Fire-and-forget — a host without notifications must not delay boot.
+    void returnReminders.refreshAll();
+    void resolveReturnLaunch();
     // The Folio is cosmetic and its images are heavy, so it loads after boot
     // rather than holding up the first paint.
     void folio.load();

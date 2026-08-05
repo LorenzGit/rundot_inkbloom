@@ -1697,3 +1697,29 @@ html[data-reduced-motion="true"] .toast {
         animation: none;
     }
 }
+
+/*
+ * Explicit touch floor. These compute above 44px today via padding alone, which
+ * is invisible to any static read and silently lost the moment padding or the
+ * type scale changes. Pinning the floor keeps the guarantee independent of both.
+ */
+.icon-button,
+button {
+    min-height: 44px;
+}
+
+/*
+ * Hand cursor on anything clickable.
+ *
+ * A native <button> does NOT get a pointer cursor by default — browsers render
+ * the plain arrow — so it has to be asked for. Without this, desktop players
+ * get no hover affordance and the UI reads as inert. Element-selector
+ * specificity is the weakest there is, so any existing per-class `cursor` rule
+ * (including `default` or `not-allowed`) still wins.
+ */
+button:not(:disabled),
+summary,
+[role="button"]:not([aria-disabled="true"]),
+label[for] {
+    cursor: pointer;
+}

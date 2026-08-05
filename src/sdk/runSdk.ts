@@ -419,6 +419,9 @@ export async function withHostOverlay<T>(run: () => Promise<T>): Promise<T> {
 }
 
 export async function showVerifiedRewardedAd(id: string, name: string): Promise<VerifiedActionResult> {
+    // Offered vs complete: one without the other cannot separate a weak reward
+    // from missing inventory. Emitted here so every placement is covered once.
+    void recordAnalytics("rewarded_ad_offered", { ad_display_id: id });
     if (!capabilities.ads) return "unavailable";
     try {
         const ready = await withTimeout(RundotGameAPI.ads.isRewardedAdReadyAsync(), 2_000, "ads.ready");
@@ -426,6 +429,9 @@ export async function showVerifiedRewardedAd(id: string, name: string): Promise<
         const completed = await withHostOverlay(() =>
             RundotGameAPI.ads.showRewardedAdAsync({ adDisplayId: id, adDisplayName: name }),
         );
+        // Only a confirmed completion earned the reward — `cancelled` covers a
+        // video the player closed early, which must not count as a watch.
+        if (completed === true) void recordAnalytics("rewarded_ad_complete", { ad_display_id: id });
         return completed === true ? "verified" : "cancelled";
     } catch {
         return "failed";
@@ -433,6 +439,8 @@ export async function showVerifiedRewardedAd(id: string, name: string): Promise<
 }
 
 export async function showVerifiedInterstitialAd(id: string, name: string): Promise<VerifiedActionResult> {
+    // Interstitial load is the number to weigh against D1 when tuning ads.
+    void recordAnalytics("interstitial_shown", { ad_display_id: id });
     if (!capabilities.ads) return "unavailable";
     try {
         const ready = await withTimeout(
@@ -609,4 +617,38 @@ export function registerLifecycles({
             subs.length = 0;
         },
     };
+}
+
+// ---------------------------------------------------------------------------
+// Return-reminder support, kept beside the other notification calls so the
+// retention module never talks to RundotGameAPI directly.
+// ---------------------------------------------------------------------------
+
+/** Cancel a scheduled reminder once the thing it promised has been done. */
+export async function cancelLocalNotification(id: string): Promise<void> {
+    if (!capabilities.notifications) return;
+    try {
+        await withTimeout(RundotGameAPI.notifications.cancelNotification(id), 1_500, "notifications.cancel");
+    } catch {
+        // a reminder that will not cancel must not break the beat that
+        // completed the task it was promising
+    }
+}
+
+/**
+ * How this session was launched. `timed_out` counts as unknown rather than
+ * organic, so notification attribution never over-counts cold starts.
+ */
+export async function resolveLaunchIntent(): Promise<{ kind: string; params: Record<string, string> } | null> {
+    try {
+        const intent = await withTimeout(
+            RundotGameAPI.app.resolveLaunchIntent({ maxWaitMs: 800 }),
+            1_500,
+            "app.resolveLaunchIntent",
+        );
+        if (!intent || intent.kind === "timed_out") return null;
+        return { kind: intent.kind, params: intent.params ?? {} };
+    } catch {
+        return null;
+    }
 }

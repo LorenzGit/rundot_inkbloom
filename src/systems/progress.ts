@@ -14,6 +14,7 @@ import { runtimeServices } from "./runtimeServices.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
 import { submitDiscoveryScore } from "../sdk/runCommerce.ts";
 
+import { analytics } from "./analytics/analyticsConfig.ts";
 /** A discovery or unlock the page should celebrate, in the order it happened. */
 export interface Celebration {
     kind: "discovery" | "unlock";
@@ -110,6 +111,9 @@ export function recordDiscovery(index: number, cell: number | null): void {
             cell: null,
         });
         runtimeServices.track("ink_unlocked", { ink_id: ink.id, at: count });
+        // A new ink is the collection beat this game is built around — the
+        // thing a player would show someone, unlike a distance number.
+        analytics.event("milestone_reached", { milestone: "ink_unlocked", value: count, ink_id: ink.id });
     }
 
     // The sixtieth find summons the colophon — once, ever. The overlay itself
