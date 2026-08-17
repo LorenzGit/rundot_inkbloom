@@ -9,6 +9,7 @@
 import { LOCALES, selectLocale, t } from "../systems/localization.ts";
 import { getRunCapabilities, setNotificationPreference } from "../sdk/runSdk.ts";
 import { store, useStore } from "../state/store.ts";
+import { returnReminders } from "../systems/retention/retentionConfig.ts";
 import { saveSystem } from "../systems/save.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
@@ -40,6 +41,14 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
     const toggleNotifications = async () => {
         inkAudio.play("tap");
         const next = !state.notificationsEnabled;
+        if (!next) {
+            // Opt out of INKBLOOM only. The host preference belongs to the RUN
+            // app and every game shares it, so revoking it here would silence
+            // reminders in all of them.
+            commit({ notificationsOptOut: true, notificationsEnabled: false });
+            void returnReminders.cancelAll();
+            return;
+        }
         const result = await setNotificationPreference(next);
         if (result === "unavailable") {
             store.patch({ toast: t("SettingsUnavailable") });

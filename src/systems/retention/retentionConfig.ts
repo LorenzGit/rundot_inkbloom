@@ -36,10 +36,12 @@ export const returnReminders = createReturnReminders({
     schedule: (input) => rearmLocalNotification(input),
     cancel: (id) => cancelLocalNotification(id),
     resolveLaunch: () => resolveLaunchIntent(),
-    isEnabled: () => {
-        const state = store.get();
-        return state.notificationsEnabled === true && state.notificationsConsent === "granted";
-    },
+    // Only an explicit player opt-out gates. The permission below belongs to
+    // the RUN app and is shared by every game, so treating it as a gate made
+    // "not read yet" indistinguishable from "the player said stop" — which is
+    // what kept this cadence dormant.
+    isOptedOut: () => store.get().notificationsOptOut,
+    permissionHint: () => store.get().notificationsConsent === "granted",
     track: (event, payload) => analytics.event(event, payload),
 });
 

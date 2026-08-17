@@ -30,6 +30,7 @@ import {
     potPurchasable,
     purchaseKit,
     purchasePot,
+    recordStoreOpened,
 } from "../systems/monetization.ts";
 import Panel from "./Panel.tsx";
 
@@ -48,6 +49,7 @@ export default function KitScreen({ onClose }: { onClose: () => void }) {
     const [notice, setNotice] = useState<string | null>(null);
 
     useEffect(() => {
+        recordStoreOpened();
         markOfferSeen();
     }, []);
 

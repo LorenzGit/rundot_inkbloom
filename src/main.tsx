@@ -3,7 +3,13 @@ import { createRoot } from "react-dom/client";
 import App from "./ui/App.tsx";
 import ErrorBoundary from "./ui/ErrorBoundary.tsx";
 import { store } from "./state/store.ts";
-import { applyRunSafeArea, initSdk, registerLifecycles, requestHostExit } from "./sdk/runSdk.ts";
+import {
+    applyRunSafeArea,
+    initSdk,
+    refreshRunCapabilities,
+    registerLifecycles,
+    requestHostExit,
+} from "./sdk/runSdk.ts";
 import { warmAssets } from "./assets/preload.ts";
 import { saveSystem } from "./systems/save.ts";
 import { folio } from "./systems/folio.ts";
@@ -19,6 +25,10 @@ import { resolveReturnLaunch, returnReminders } from "./systems/retention/retent
 // Fired at module scope, before any await: the only row a player who closes the
 // tab mid-load will ever produce. Buffered until markTransportReady() below.
 analytics.installErrorCapture();
+// The browser's own end-of-session signals. onQuit alone produced two
+// session_end events across the whole fleet in thirty days, because it
+// needs a clean host quit and players just close the tab.
+analytics.installSessionEndCapture();
 analytics.funnelStep("load", 1);
 /**
  * Boot sequence. The ORDER here matters — it's the pattern from a shipped RUN
@@ -104,6 +114,9 @@ async function boot() {
             void saveSystem.flush();
         },
         onAwake: () => {
+            // Re-read the capability snapshot: grants/attaches while asleep
+            // must not leave the session frozen on its boot snapshot.
+            refreshRunCapabilities();
             store.patch({ paused: false });
             inkAudio.setPaused(false);
             runtimeServices.resume();

@@ -2,8 +2,7 @@
   "client": {
     "values": {
       "inkbloom_runtime": {
-        "dailyPromptEnabled": true,
-        "notificationDelaySeconds": 86400
+        "dailyPromptEnabled": true
       },
       "inkbloom_monetization": {
         "enabled": true,

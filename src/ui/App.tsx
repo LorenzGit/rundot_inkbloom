@@ -23,6 +23,7 @@ import { applyRunSafeArea } from "../sdk/runSdk.ts";
 import { t } from "../systems/localization.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 
 const DevelopmentTools = import.meta.env.DEV ? lazy(() => import("../dev/DevelopmentTools.tsx")) : null;
 
@@ -79,6 +80,12 @@ function PlayOverlay() {
 export default function App() {
     useOrientationSafeArea();
     const phase = useStore((state) => state.phase);
+
+    // RUN's core-loop query expects screen_viewed; this router is the only
+    // place every screen change passes through.
+    useEffect(() => {
+        analytics.event("screen_viewed", { screen: phase });
+    }, [phase]);
     const paused = useStore((state) => state.paused);
 
     return (
@@ -121,11 +128,17 @@ function ColophonSlot() {
 
 function Toast() {
     const toast = useStore((state) => state.toast);
+    const seq = useStore((state) => state.toastSeq);
     useEffect(() => {
         if (!toast) return;
-        const timer = window.setTimeout(() => store.patch({ toast: null }), 2_800);
+        const timer = window.setTimeout(() => {
+            // Do not let an older toast's timer dismiss a newer message. The
+            // seq comparison (not the text) keeps a repeated identical toast
+            // alive for its own full duration.
+            if (store.get().toastSeq === seq) store.patch({ toast: null });
+        }, 2_800);
         return () => window.clearTimeout(timer);
-    }, [toast]);
+    }, [toast, seq]);
     if (!toast) return null;
     return (
         <button type="button" className="toast" onClick={() => store.patch({ toast: null })}>

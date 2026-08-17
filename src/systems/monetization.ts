@@ -369,7 +369,14 @@ export async function watchForNudge(): Promise<NudgeResult> {
         hintsWatchedToday: current.hintDay === day ? current.hintsWatchedToday + 1 : 1,
     });
     await saveSystem.flush();
-    telemetry.record("reward_granted", { placement_id: PLACEMENT_MARGIN_NUDGE, reward_id: "margin_nudge", amount: 1 });
+    telemetry.record("reward_claimed", { placement_id: PLACEMENT_MARGIN_NUDGE, reward_id: "margin_nudge", amount: 1 });
+    // Income side of currency_spent, which fires when a nudge is used.
+    telemetry.record("currency_earned", {
+        currency: "nudges",
+        amount: 1,
+        source: "ad_reward",
+        placement_id: PLACEMENT_MARGIN_NUDGE,
+    });
     return "granted";
 }
 
@@ -403,7 +410,7 @@ export async function watchToBorrow(slot: number): Promise<BorrowResult> {
         borrowsToday: current.borrowDay === day ? current.borrowsToday + 1 : 1,
     });
     await saveSystem.flush();
-    telemetry.record("reward_granted", { placement_id: PLACEMENT_BORROW_INK, reward_id: "borrow_ink", amount: 1 });
+    telemetry.record("reward_claimed", { placement_id: PLACEMENT_BORROW_INK, reward_id: "borrow_ink", amount: 1 });
     return "granted";
 }
 
@@ -427,12 +434,12 @@ export async function spendPotNudge(): Promise<PotSpendResult> {
     if (store.get().potNudges <= 0) return "empty";
     if (!isConfiguredPlatformId(PLATFORM_IDS.nudgeEntitlement)) return "unavailable";
 
-    const left = await consumeEntitlement(PLATFORM_IDS.nudgeEntitlement, 1, "nudge_spent");
+    const left = await consumeEntitlement(PLATFORM_IDS.nudgeEntitlement, 1, "currency_spent");
     if (left === null) return "unavailable";
 
     store.patch({ potNudges: Math.max(0, left) });
     await saveSystem.flush();
-    telemetry.record("reward_granted", { product_id: PRODUCT_POT, reward_id: "pot_nudge", amount: 1, remaining: left });
+    telemetry.record("reward_claimed", { product_id: PRODUCT_POT, reward_id: "pot_nudge", amount: 1, remaining: left });
     return "spent";
 }
 
@@ -442,11 +449,14 @@ export type PotPurchaseResult = "bought" | "unavailable" | "cancelled" | "failed
 export async function purchasePot(): Promise<PotPurchaseResult> {
     if (!potPurchasable()) return "unavailable";
 
-    telemetry.record("purchase_tapped", { product_id: PRODUCT_POT });
-    telemetry.record("checkout_started", { product_id: PRODUCT_POT, price: potPriceText });
+    telemetry.record("offer_clicked", { product_id: PRODUCT_POT });
+    telemetry.record("iap_purchase_started", { product_id: PRODUCT_POT, price: potPriceText });
     try {
         const outcome = await coordinator.purchase(PRODUCT_POT, PLATFORM_IDS.potOfInkItem);
-        telemetry.record("checkout_result", { product_id: PRODUCT_POT, status: outcome.status });
+        telemetry.record(outcome.status === "confirmed" ? "iap_purchase_complete" : "iap_purchase_failed", {
+            product_id: PRODUCT_POT,
+            status: outcome.status,
+        });
         if (outcome.status === "confirmed") {
             await syncPotBalance("purchase");
             return "bought";
@@ -459,7 +469,7 @@ export async function purchasePot(): Promise<PotPurchaseResult> {
         }
         return "failed";
     } catch (error) {
-        telemetry.record("checkout_result", { product_id: PRODUCT_POT, status: "threw" });
+        telemetry.record("iap_purchase_failed", { product_id: PRODUCT_POT, status: "threw" });
         console.warn("[monetization] pot checkout failed", error);
         return "failed";
     }
@@ -472,27 +482,41 @@ export async function purchaseKit(): Promise<KitPurchaseResult> {
     if (store.get().ownsKit) return "owned";
     if (!kitPurchasable()) return "unavailable";
 
-    telemetry.record("purchase_tapped", { product_id: PRODUCT_KIT });
-    telemetry.record("checkout_started", { product_id: PRODUCT_KIT, price: catalogPrice });
+    telemetry.record("offer_clicked", { product_id: PRODUCT_KIT });
+    telemetry.record("iap_purchase_started", { product_id: PRODUCT_KIT, price: catalogPrice });
     try {
         const outcome = await coordinator.purchase(PRODUCT_KIT, PLATFORM_IDS.illuminatorsKitItem);
-        telemetry.record("checkout_result", { product_id: PRODUCT_KIT, status: outcome.status });
+        telemetry.record(outcome.status === "confirmed" ? "iap_purchase_complete" : "iap_purchase_failed", {
+            product_id: PRODUCT_KIT,
+            status: outcome.status,
+        });
         if (outcome.status === "confirmed") return "owned";
         if (outcome.status === "cancelled") return "cancelled";
         if (outcome.status === "unknown") return "pending";
         return "failed";
     } catch (error) {
-        telemetry.record("checkout_result", { product_id: PRODUCT_KIT, status: "threw" });
+        telemetry.record("iap_purchase_failed", { product_id: PRODUCT_KIT, status: "threw" });
         console.warn("[monetization] checkout failed", error);
         return "failed";
     }
+}
+
+/**
+ * The shop screen was opened. Separate from `markOfferSeen`, which is a
+ * once-ever state change: the store impression must be recorded on every visit
+ * or the monetization funnel has no denominator.
+ */
+export function recordStoreOpened(): void {
+    telemetry.record("store_opened", { placement: "kit_screen" });
+    telemetry.record("offer_shown", { product_id: PRODUCT_KIT, price: catalogPrice });
+    if (potOfferUnlocked()) telemetry.record("offer_shown", { product_id: PRODUCT_POT, price: potPrice() });
 }
 
 /** Mark the offer as seen so it stops being pushed and becomes a menu entry. */
 export function markOfferSeen(): void {
     if (store.get().kitOfferSeen) return;
     store.patch({ kitOfferSeen: true });
-    telemetry.record("offer_viewed", { product_id: PRODUCT_KIT, price: catalogPrice });
+    telemetry.record("offer_shown", { product_id: PRODUCT_KIT, price: catalogPrice });
     void saveSystem.flush();
 }
 

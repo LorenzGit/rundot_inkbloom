@@ -44,8 +44,24 @@ export interface ReturnRemindersConfig {
     cancel: (id: string) => Promise<void>;
     /** Resolve how the app was launched. Returns null when not a notification. */
     resolveLaunch: () => Promise<{ kind: string; params: Record<string, string> } | null>;
-    /** True when the player has notifications enabled and consented. */
-    isEnabled: () => boolean;
+    /**
+     * The player's OWN opt-out, from the game's settings. Optional; omit when
+     * the game has no toggle.
+     *
+     * This must NOT be a cached host-permission probe. Gating on one is the
+     * bug this signature exists to prevent: a probe that failed, timed out, or
+     * ran before the player answered the permission prompt silently suppresses
+     * every reminder for the whole session, and a mid-session grant never
+     * takes effect. The host already no-ops a schedule when its permission is
+     * off, so an ungranted attempt is free — a stale `false` is not.
+     */
+    isOptedOut?: () => boolean;
+    /**
+     * Cached host permission, for telemetry only — it rides on the scheduled
+     * event so a low `scheduled:true` rate can be told apart from a low
+     * permission rate. Never gates.
+     */
+    permissionHint?: () => boolean;
     /** Fire-and-forget analytics. */
     track: (event: string, payload: Record<string, string | number | boolean>) => void;
     /**
@@ -84,8 +100,11 @@ export interface ReturnReminders {
 }
 
 export function createReturnReminders(config: ReturnRemindersConfig): ReturnReminders {
-    const { schedule, cancel, resolveLaunch, isEnabled, track, reminders, idPrefix } = config;
+    const { schedule, cancel, resolveLaunch, isOptedOut, permissionHint, track, reminders, idPrefix } = config;
     const fullId = (id: string) => `${idPrefix}-${id}`;
+
+    /** Only an explicit player opt-out stops a schedule. See `isOptedOut`. */
+    const suppressed = () => isOptedOut?.() === true;
 
     async function scheduleOne(reminder: ReturnReminder): Promise<void> {
         const ok = await schedule({
@@ -101,19 +120,20 @@ export function createReturnReminders(config: ReturnRemindersConfig): ReturnRemi
             reminder_id: reminder.id,
             delay_hours: Math.round(reminder.delaySeconds / HOUR),
             scheduled: ok,
+            permission_cached: permissionHint?.() ?? false,
         });
     }
 
     return {
         async refreshAll() {
-            if (!isEnabled()) return;
+            if (suppressed()) return;
             for (const reminder of reminders()) {
                 await scheduleOne(reminder);
             }
         },
 
         async refreshPrimary() {
-            if (!isEnabled()) return;
+            if (suppressed()) return;
             const primary = reminders()[0];
             if (primary) await scheduleOne(primary);
         },

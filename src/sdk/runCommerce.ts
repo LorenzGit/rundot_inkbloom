@@ -13,6 +13,11 @@
 import RundotGameAPI from "@series-inc/rundot-game-sdk/api";
 import type { ShopOrderHistoryResponse, ShopPurchaseResponse, StorefrontItem } from "@series-inc/rundot-game-sdk";
 import { getRunCapabilities, withHostOverlay, withTimeout } from "./runSdk.ts";
+import {
+    checkoutErrorCode,
+    verdictForCode,
+    verdictForMessage,
+} from "../helpers/monetization/checkoutClassification.ts";
 
 function namespace(name: string): boolean {
     return typeof (RundotGameAPI as unknown as Record<string, unknown>)[name] === "object";
@@ -114,13 +119,29 @@ export const shopPort = {
         if (!hasShop()) throw new PurchaseUnavailableError();
         // A checkout is user-mediated and may legitimately take a long time.
         // Bounding it too tightly turns a completed order into an "unknown".
-        return withHostOverlay(() => RundotGameAPI.shop.purchase(itemId, idempotencyKey));
+        const response = await withHostOverlay(() => RundotGameAPI.shop.purchase(itemId, idempotencyKey));
+        // `success` only reports that the host accepted the request, and
+        // replaying an idempotency key returns the ORIGINAL order verbatim —
+        // so an order still in `pending_payment` also arrives as
+        // `success: true`. Confirming on that would grant an unpaid purchase.
+        if (!response.success || response.order?.status !== "fulfilled") {
+            throw new UnsettledOrderError(response.order?.status);
+        }
+        return response;
     },
     async getOrderHistory(): Promise<ShopOrderHistoryResponse> {
         if (!hasShop()) throw new PurchaseUnavailableError();
         return withTimeout(RundotGameAPI.shop.getOrderHistory({ limit: 25 }), 8_000, "shop.getOrderHistory");
     },
 };
+
+/** The host accepted the order but has not settled it — outcome still open. */
+export class UnsettledOrderError extends Error {
+    constructor(status: string | undefined) {
+        super(`RUN shop returned order status "${status ?? "none"}"`);
+        this.name = "UnsettledOrderError";
+    }
+}
 
 export class PurchaseUnavailableError extends Error {
     constructor() {
@@ -153,15 +174,24 @@ export function findConfirmedOrder(history: ShopOrderHistoryResponse, idempotenc
  * because an order may still be in flight and must remain reconcilable.
  */
 export function classifyPurchaseError(error: unknown): "cancelled" | "failed" | "unknown" {
+    // The checkout never opened — nothing can have been charged.
     if (error instanceof PurchaseUnavailableError) return "failed";
-    const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? "").toLowerCase();
-    if (!message) return "unknown";
-    if (message.includes("cancel") || message.includes("dismiss") || message.includes("abort")) return "cancelled";
-    if (message.includes("not found") || message.includes("inactive") || message.includes("invalid item")) {
-        return "failed";
+    // An order the host never settled may already have taken the money.
+    if (error instanceof UnsettledOrderError) return "unknown";
+    // The host names most declines outright; that code is the only reliable way
+    // to tell a clean, uncharged refusal from an ambiguous failure.
+    const code = checkoutErrorCode(error);
+    if (code) {
+        const verdict = verdictForCode(code);
+        if (verdict !== "unknown") return verdict;
     }
-    if (message.includes("insufficient")) return "failed";
-    return "unknown";
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    if (!message) return "unknown";
+    // Inkbloom's own host phrasings, then the shared fallback.
+    const text = message.toLowerCase();
+    if (text.includes("dismiss") || text.includes("abort")) return "cancelled";
+    if (text.includes("not found") || text.includes("inactive") || text.includes("invalid item")) return "failed";
+    return verdictForMessage(message);
 }
 
 let scoreSubmitInFlight = false;

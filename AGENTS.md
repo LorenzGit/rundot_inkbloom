@@ -61,3 +61,13 @@ audit, and both production builds.
 Development contracts (`?screen=`, `?debug=1`, `?qa=1`) must stay
 development-only and may never fabricate a RUN ad, purchase, entitlement, or
 other privileged outcome.
+
+## One version
+
+`package.json` is the single version number: the menu renders it and every analytics
+event is tagged with it as `build_version`. Once published it must equal the version
+RUN serves on the Public tag — never pin it to a separate development track.
+`rundot deploy --bump <Major|Minor|Patch>` decides the number; set `package.json` and
+`package-lock.json` to it in the same commit as the ship, then verify with
+`npm run version:check` (unpublished games pass; needs network, so it sits outside
+`npm run check`).

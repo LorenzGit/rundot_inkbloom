@@ -15,9 +15,9 @@ export const analytics = createAnalytics({
     emitEvent: (name, payload) => {
         void recordAnalytics(name, { ...payload, build_version: packageJson.version });
     },
-    emitFunnelStep: (step, name, funnel, order) => {
-        void recordFunnelStep(step, name, funnel, order);
-    },
+    // Return the delivery promise so a once-ever step only persists on real
+    // delivery — recordFunnelStep resolves false on timeout or RPC failure.
+    emitFunnelStep: (step, name, funnel, order) => recordFunnelStep(step, name, funnel, order),
     funnels: {
         /**
          * The loading phase itself, ahead of the first-run funnel (order 0).

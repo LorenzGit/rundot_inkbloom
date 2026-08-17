@@ -32,6 +32,7 @@ export interface InkbloomSaveV1 {
         | "sfxEnabled"
         | "sfxVolume"
         | "notificationsEnabled"
+        | "notificationsOptOut"
         | "notificationsConsent"
         | "hapticsEnabled"
         | "reducedMotion"
@@ -140,6 +141,7 @@ function snapshot(): InkbloomSaveV1 {
             sfxEnabled: state.sfxEnabled,
             sfxVolume: state.sfxVolume,
             notificationsEnabled: state.notificationsEnabled,
+            notificationsOptOut: state.notificationsOptOut,
             notificationsConsent: state.notificationsConsent,
             hapticsEnabled: state.hapticsEnabled,
             reducedMotion: state.reducedMotion,
@@ -208,9 +210,12 @@ function migrate(raw: unknown): InkbloomSaveV1 | null {
                 ["unknown", "granted", "denied"] as const,
                 defaults.settings.notificationsConsent,
             ),
-            // Never restore an enabled notification preference the player never
-            // granted: consent has to be present in the same save.
-            notificationsEnabled: settings.notificationsConsent === "granted" && settings.notificationsEnabled === true,
+            // Additive back-fill: "absent" must mean "has not opted out", or the
+            // flag would re-silence every existing player.
+            notificationsOptOut: booleanOr(settings.notificationsOptOut, false),
+            // Re-derived from the live host permission on the first refresh;
+            // restored only so Settings paints something sane before then.
+            notificationsEnabled: booleanOr(settings.notificationsEnabled, false),
             hapticsEnabled: booleanOr(settings.hapticsEnabled, defaults.settings.hapticsEnabled),
             reducedMotion: booleanOr(settings.reducedMotion, defaults.settings.reducedMotion),
             locale: enumOr(settings.locale, ["English", "PortugueseBR", "SpanishLA"] as const, "English"),

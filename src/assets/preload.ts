@@ -20,9 +20,20 @@ export async function warmAssets(onProgress: (progress: number) => void = () => 
             await Assets.loadBundle(CRITICAL_BUNDLES, onProgress);
         }
         if (DEFERRED_BUNDLES.length > 0) {
-            // Fire-and-forget: trickles in on idle, interrupts cleanly if a
-            // later Assets.load() needs one of these sooner.
-            Assets.backgroundLoadBundle(DEFERRED_BUNDLES);
+            // Deliberately NOT Assets.backgroundLoadBundle: its internal queue
+            // has no rejection handling, so one flaky fetch silently wedges
+            // every remaining deferred asset for the session. Sequential loads
+            // with a catch keep the trickle alive past a failure, and Assets
+            // dedupes if a later explicit load needs one of these sooner.
+            void (async () => {
+                for (const bundle of DEFERRED_BUNDLES) {
+                    try {
+                        await Assets.loadBundle(bundle);
+                    } catch (error) {
+                        console.warn(`[preload] deferred bundle "${bundle}" failed — skipping`, error);
+                    }
+                }
+            })();
         }
     } catch (err) {
         console.warn("[preload] asset warm failed — continuing without", err);

@@ -110,7 +110,7 @@ export async function spendFreeNudge(discoveryId: string): Promise<boolean> {
     store.patch(patch);
     inkAudio.play("reward");
     void runtimeServices.haptic("light");
-    runtimeServices.track("nudge_spent", { discovery_id: discoveryId, source });
+    runtimeServices.track("currency_spent", { discovery_id: discoveryId, source });
     await saveSystem.flush();
     return true;
 }
@@ -127,7 +127,7 @@ export async function watchNudge(discoveryId: string): Promise<NudgeResult> {
     store.patch({ revealedHints: [...current.revealedHints, discoveryId] });
     inkAudio.play("reward");
     void runtimeServices.haptic("success");
-    runtimeServices.track("nudge_spent", { discovery_id: discoveryId, source: "ad" });
+    runtimeServices.track("currency_spent", { discovery_id: discoveryId, source: "ad" });
     await saveSystem.flush();
     return "granted";
 }

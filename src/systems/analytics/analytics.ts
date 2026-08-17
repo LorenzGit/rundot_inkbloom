@@ -44,6 +44,9 @@ export type EventProps = Record<string, EventPropValue>;
  * `onceEver` marks a first-run funnel: every step is deduped for the player's
  * lifetime. Set it on the FTUE funnel and nothing else.
  */
+/** What ended the session — the `trigger` dimension of session_end_summary_30d. */
+export type SessionEndTrigger = "quit" | "hidden" | "pagehide";
+
 export interface FunnelDefinition {
     order?: number;
     steps: string[];
@@ -53,8 +56,14 @@ export interface FunnelDefinition {
 export interface AnalyticsConfig {
     /** Record a custom event. Wire this to the game's own SDK wrapper. */
     emitEvent: (name: string, payload: EventProps) => void;
-    /** Record a funnel step. Wire this to the game's own SDK wrapper. */
-    emitFunnelStep: (step: number, name: string, funnel: string, order: number) => void;
+    /**
+     * Record a funnel step. Wire this to the game's own SDK wrapper. May
+     * return whether delivery succeeded; on an `onceEver` funnel the lifetime
+     * mark is only persisted once delivery is confirmed (a void return counts
+     * as delivered), so a transient RPC failure can retry on a later beat
+     * instead of silently losing the step for the player's lifetime.
+     */
+    emitFunnelStep: (step: number, name: string, funnel: string, order: number) => void | boolean | Promise<boolean>;
     /**
      * Funnel declarations: name -> { order, steps, onceEver }. Declare every
      * funnel here — never rename or renumber a step that has shipped, or the
@@ -102,8 +111,25 @@ export interface Analytics {
      * a load regression or an over-monetized build without guessing.
      */
     sessionPause(): void;
-    /** Record `session_end` with elapsed time and screens viewed. Wire to onQuit. */
-    sessionEnd(): void;
+    /**
+     * Record `session_end` with elapsed time, screens viewed, the screen the
+     * player was last on, and what ended the session.
+     *
+     * RUN's `session_end_summary_30d` groups by `screen` and `trigger`; sending
+     * neither is why every row this query has ever returned reads
+     * "unknown/unknown". `screen` is tracked automatically from `screen_viewed`.
+     */
+    sessionEnd(trigger?: SessionEndTrigger): void;
+    /**
+     * Wire the browser's own end-of-session signals. Call once at boot.
+     *
+     * `onQuit` alone is not enough: it needs a clean host-initiated quit, and
+     * real players close the tab or swipe the app away instead. Across a
+     * 17-game fleet that path produced two events in thirty days. The
+     * `visibilitychange -> hidden` signal is the one that actually fires, and
+     * it fires while the page is still alive, so the request has time to leave.
+     */
+    installSessionEndCapture(): void;
     /** Record `experiment_exposure`. Call right after resolving a variant. */
     experimentExposure(experiment: { name: string; variant: string; group?: string | null }): void;
     /** Clear all once-ever marks — wire to any dev "reset progress" action. */
@@ -135,6 +161,15 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
     // so a device clock change mid-session cannot produce a negative duration.
     const sessionStartedAt = typeof performance !== "undefined" ? performance.now() : 0;
     let screensViewed = 0;
+    /** Last screen reported via `screen_viewed`; the "where did they quit" field. */
+    let lastScreen = "boot";
+    let sessionEndCaptureInstalled = false;
+    /**
+     * A session ends once. Re-armed when the page becomes visible again, so a
+     * player who backgrounds the game and returns still gets a real end event
+     * for the second stretch.
+     */
+    let sessionEnded = false;
 
     function elapsedSeconds(): number {
         if (typeof performance === "undefined") return 0;
@@ -173,17 +208,25 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
         return marks;
     }
 
-    /** Returns true if `mark` was newly recorded, false if it already existed. */
-    function markOnce(mark: string): boolean {
+    /** Returns true if `mark` was newly held in memory, false if it existed. */
+    function holdMark(mark: string): boolean {
         const current = readMarks();
         if (current.has(mark)) return false;
         current.add(mark);
+        return true;
+    }
+
+    function persistMarks(): void {
         try {
-            localStorage.setItem(marksKey, JSON.stringify([...current]));
+            localStorage.setItem(marksKey, JSON.stringify([...readMarks()]));
         } catch {
             // quota / private mode: the in-memory set still dedups this session
         }
-        return true;
+    }
+
+    /** Undo a held mark after a failed delivery so a later beat can retry. */
+    function releaseMark(mark: string): void {
+        readMarks().delete(mark);
     }
 
     function isOff(name: string): boolean {
@@ -221,7 +264,11 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
                 }
             }
             if (props) Object.assign(payload, props);
-            if (name === "screen_view") screensViewed += 1;
+            if (name === "screen_viewed") {
+                screensViewed += 1;
+                const screen = payload.screen;
+                if (typeof screen === "string" && screen) lastScreen = screen;
+            }
             log("event", name, payload);
             safeEmitEvent(name, payload);
         },
@@ -231,14 +278,23 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
             const definition = funnels[funnel];
             const name = definition?.steps[step - 1];
             if (!name) return;
-            if (definition.onceEver && !markOnce(`${funnel}:${step}:${name}`)) return;
+            const onceMark = definition.onceEver ? `${funnel}:${step}:${name}` : null;
+            if (onceMark && !holdMark(onceMark)) return;
             log("funnel", funnel, step, name);
             const order = definition.order ?? 0;
             deliver(() => {
                 try {
-                    emitFunnelStep(step, name, funnel, order);
+                    const result = emitFunnelStep(step, name, funnel, order);
+                    if (!onceMark) return;
+                    void Promise.resolve(result)
+                        .then((ok) => {
+                            if (ok === false) releaseMark(onceMark);
+                            else persistMarks();
+                        })
+                        .catch(() => releaseMark(onceMark));
                 } catch {
                     // never let a funnel step break the beat that triggered it
+                    if (onceMark) releaseMark(onceMark);
                 }
             });
             // trackFunnelStep carries no payload, so context rides on a
@@ -283,8 +339,26 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
             system.event("session_pause", { elapsed_sec: elapsedSeconds() });
         },
 
-        sessionEnd() {
-            system.event("session_end", { elapsed_sec: elapsedSeconds(), screens_viewed: screensViewed });
+        sessionEnd(trigger = "quit") {
+            if (sessionEnded) return;
+            sessionEnded = true;
+            system.event("session_end", {
+                elapsed_sec: elapsedSeconds(),
+                screens_viewed: screensViewed,
+                screen: lastScreen,
+                trigger,
+            });
+        },
+
+        installSessionEndCapture() {
+            if (sessionEndCaptureInstalled || typeof document === "undefined") return;
+            sessionEndCaptureInstalled = true;
+            document.addEventListener("visibilitychange", () => {
+                if (document.visibilityState === "hidden") this.sessionEnd("hidden");
+                else sessionEnded = false;
+            });
+            // Backstop for browsers that tear down without a hidden transition.
+            window.addEventListener("pagehide", () => this.sessionEnd("pagehide"));
         },
 
         experimentExposure(experiment) {

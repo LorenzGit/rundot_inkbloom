@@ -77,7 +77,8 @@ export async function createPixiApp(host: HTMLElement, force?: RendererPreferenc
             app = await initializeRenderer(host, "webgl");
         }
     }
-    const rendererName = app.renderer.constructor.name.toLowerCase().includes("webgpu") ? "webgpu" : "webgl";
+    // renderer.name is Pixi's literal backend string; constructor.name breaks under minification.
+    const rendererName = app.renderer.name.toLowerCase().includes("webgpu") ? "webgpu" : "webgl";
     document.documentElement.dataset.renderer = rendererName;
     app.canvas.dataset.renderer = rendererName;
     app.canvas.setAttribute("aria-label", "Inkbloom page — paint inks and watch them react");

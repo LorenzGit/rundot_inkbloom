@@ -48,6 +48,23 @@ function sdkNamespace(name: string): boolean {
     return typeof (RundotGameAPI as unknown as Record<string, unknown>)[name] === "object";
 }
 
+/**
+ * PITFALL: there is NO runtime RundotGameAPI.haptics namespace (the HapticsApi
+ * interface in the .d.ts is types-only). Support comes from DeviceInfo, and the
+ * trigger lives on the API root. Read LIVE at every call site that acts on it:
+ * `enabled` reflects the player's system setting, which can change mid-session,
+ * and a cached false at boot must never gate a later action.
+ */
+function hapticsAvailableNow(): boolean {
+    if (!_ready) return false;
+    try {
+        const device = RundotGameAPI.system.getDevice();
+        return device?.haptics?.supported === true && device?.haptics?.enabled === true;
+    } catch {
+        return false;
+    }
+}
+
 function snapshotCapabilities(): RunCapabilities {
     if (!_ready) return OFFLINE_CAPABILITIES;
     const environment = RundotGameAPI._environmentData?.capabilities;
@@ -58,17 +75,7 @@ function snapshotCapabilities(): RunCapabilities {
         analytics: sdkNamespace("analytics"),
         liveops: sdkNamespace("liveops"),
         notifications: sdkNamespace("notifications"),
-        // PITFALL: there is NO runtime RundotGameAPI.haptics namespace (the
-        // HapticsApi interface in the .d.ts is types-only). Support comes
-        // from DeviceInfo, and the trigger lives on the API root.
-        haptics: (() => {
-            try {
-                const device = RundotGameAPI.system.getDevice();
-                return device?.haptics?.supported === true && device?.haptics?.enabled === true;
-            } catch {
-                return false;
-            }
-        })(),
+        haptics: hapticsAvailableNow(),
         ads: environment?.ads === true,
         purchases: environment?.purchases === true,
         subscriptions: environment?.subscriptions === true,
@@ -76,6 +83,16 @@ function snapshotCapabilities(): RunCapabilities {
 }
 
 export function getRunCapabilities(): Readonly<RunCapabilities> {
+    return capabilities;
+}
+
+/**
+ * Re-read host capabilities. Wired to onAwake (the SDK's "refresh stale data"
+ * hook) so a session that started before a grant or attach does not stay
+ * frozen on its boot snapshot.
+ */
+export function refreshRunCapabilities(): Readonly<RunCapabilities> {
+    capabilities = snapshotCapabilities();
     return capabilities;
 }
 
@@ -217,8 +234,32 @@ export async function initSdk(): Promise<boolean> {
     capabilities = snapshotCapabilities();
     if (!_ready) {
         console.info("[runSdk] RUN host unavailable; using local non-authoritative fallbacks");
+        // Inside an iframe the host is expected — a cold WebView can simply be
+        // slower than the bounded handshake. Keep watching so a late attach
+        // upgrades this session instead of stranding it offline until relaunch.
+        if (embedded) watchForLateHostAttach();
     }
     return _ready;
+}
+
+function watchForLateHostAttach(): void {
+    const deadline = performance.now() + 30_000;
+    const watcher = window.setInterval(() => {
+        try {
+            if (RundotGameAPI.isAvailable() || RundotGameAPI.isMock()) {
+                window.clearInterval(watcher);
+                _ready = true;
+                capabilities = snapshotCapabilities();
+                applyRunSafeArea();
+                console.info("[runSdk] RUN host attached after the boot handshake; capabilities refreshed");
+                return;
+            }
+        } catch {
+            window.clearInterval(watcher);
+            return;
+        }
+        if (performance.now() >= deadline) window.clearInterval(watcher);
+    }, 500);
 }
 
 export async function readAppStorage(key: string): Promise<{ ok: boolean; value: string | null }> {
@@ -280,7 +321,9 @@ export async function setNotificationPreference(enabled: boolean): Promise<Notif
 export type HapticStyle = "light" | "medium" | "heavy" | "success" | "warning" | "error";
 
 export async function triggerHaptic(style: HapticStyle): Promise<boolean> {
-    if (capabilities.haptics) {
+    // Live check, not the boot snapshot: the player can enable haptics in
+    // system settings mid-session, and the cached false would eat every buzz.
+    if (hapticsAvailableNow()) {
         try {
             const map: Record<HapticStyle, HapticFeedbackStyle> = {
                 light: HapticFeedbackStyle.Light,
@@ -418,20 +461,33 @@ export async function withHostOverlay<T>(run: () => Promise<T>): Promise<T> {
     }
 }
 
+/**
+ * Budget for an ad-readiness probe.
+ *
+ * On web the host answers this from the ad SDK, which on a cold first call
+ * waits out its consent manager (~5s) and then loads the ad script (~5s). The
+ * old 2s budget expired during that first probe and reported "no ad available"
+ * on a host that was merely still warming up — while every later probe, served
+ * from the host's cache, returned instantly. That is what made rewarded ads
+ * work only sometimes.
+ */
+const AD_READY_TIMEOUT_MS = 12_000;
+
 export async function showVerifiedRewardedAd(id: string, name: string): Promise<VerifiedActionResult> {
     // Offered vs complete: one without the other cannot separate a weak reward
     // from missing inventory. Emitted here so every placement is covered once.
     void recordAnalytics("rewarded_ad_offered", { ad_display_id: id });
     if (!capabilities.ads) return "unavailable";
     try {
-        const ready = await withTimeout(RundotGameAPI.ads.isRewardedAdReadyAsync(), 2_000, "ads.ready");
+        const ready = await withTimeout(RundotGameAPI.ads.isRewardedAdReadyAsync(), AD_READY_TIMEOUT_MS, "ads.ready");
         if (!ready) return "unavailable";
         const completed = await withHostOverlay(() =>
             RundotGameAPI.ads.showRewardedAdAsync({ adDisplayId: id, adDisplayName: name }),
         );
         // Only a confirmed completion earned the reward — `cancelled` covers a
         // video the player closed early, which must not count as a watch.
-        if (completed === true) void recordAnalytics("rewarded_ad_complete", { ad_display_id: id });
+        if (completed === true) void recordAnalytics("rewarded_ad_watched", { ad_display_id: id });
+        else void recordAnalytics("rewarded_ad_dismissed", { ad_display_id: id });
         return completed === true ? "verified" : "cancelled";
     } catch {
         return "failed";
@@ -445,7 +501,7 @@ export async function showVerifiedInterstitialAd(id: string, name: string): Prom
     try {
         const ready = await withTimeout(
             RundotGameAPI.ads.isInterstitialAdReadyAsync(),
-            2_000,
+            AD_READY_TIMEOUT_MS,
             "ads.interstitial.ready",
         );
         if (!ready) return "unavailable";
@@ -462,7 +518,9 @@ export async function purchaseVerifiedShopItem(itemId: string, idempotencyKey: s
     if (!capabilities.purchases || !sdkNamespace("shop")) return "unavailable";
     try {
         const result = await withHostOverlay(() => RundotGameAPI.shop.purchase(itemId, idempotencyKey));
-        return result.success === true ? "verified" : "failed";
+        // Kept in step with runCommerce.ts's shopPort: `success` alone can
+        // describe an order the host accepted but never settled.
+        return result.success === true && result.order?.status === "fulfilled" ? "verified" : "failed";
     } catch {
         return "failed";
     }

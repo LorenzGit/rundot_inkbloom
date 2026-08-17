@@ -92,6 +92,12 @@ export interface AppState {
     sfxEnabled: boolean;
     sfxVolume: number;
     notificationsEnabled: boolean;
+    /**
+     * The player's own "not in this game" choice, set only from Settings.
+     * Separate from the host permission because that permission is shared by
+     * every RUN game: turning reminders off here must not silence the others.
+     */
+    notificationsOptOut: boolean;
     notificationsConsent: "unknown" | "granted" | "denied";
     hapticsEnabled: boolean;
     reducedMotion: boolean;
@@ -109,6 +115,12 @@ export interface AppState {
 
     /** One-line transient message shown over everything. */
     toast: string | null;
+    /**
+     * Bumped every time a toast is SET (see store.patch). Keying on the text
+     * alone breaks when the same message fires twice: the snapshot compares
+     * equal, React skips the re-render, and the first timer kills the second.
+     */
+    toastSeq: number;
 
     runtimeReady: boolean;
     runtimeConfigVersion: string | null;
@@ -160,6 +172,7 @@ let state: AppState = {
     sfxEnabled: true,
     sfxVolume: 0.72,
     notificationsEnabled: false,
+    notificationsOptOut: false,
     notificationsConsent: "unknown",
     hapticsEnabled: true,
     reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
@@ -169,6 +182,7 @@ let state: AppState = {
     pageStirring: false,
 
     toast: null,
+    toastSeq: 0,
 
     runtimeReady: false,
     runtimeConfigVersion: null,
@@ -181,7 +195,12 @@ export const store = {
     },
 
     patch(partial: Partial<AppState>): void {
-        state = { ...state, ...partial };
+        // Stamp toastSeq whenever a toast is set so every producer gets the
+        // repeat-safe behavior without changing its call site.
+        state =
+            typeof partial.toast === "string"
+                ? { ...state, ...partial, toastSeq: state.toastSeq + 1 }
+                : { ...state, ...partial };
         for (const listener of listeners) listener();
     },
 

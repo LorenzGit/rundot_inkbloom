@@ -1,6 +1,6 @@
 /**
  * Background services: remote configuration, trusted time, telemetry, haptics,
- * and the one local notification this game sends.
+ * and the return-reminder cadence re-arm.
  *
  * Everything here is fire-and-forget and failure-tolerant. Losing LiveOps means
  * falling back to safe defaults; losing trusted time means daily surfaces
@@ -9,9 +9,9 @@
  */
 import packageJson from "../../package.json";
 import {
+    cancelLocalNotification,
     fetchLiveOps,
     getRunCapabilities,
-    rearmLocalNotification,
     recordAnalytics,
     recordFunnelStep,
     triggerHaptic,
@@ -19,22 +19,22 @@ import {
 } from "../sdk/runSdk.ts";
 import { refreshServerTime } from "./serverTime.ts";
 import { store } from "../state/store.ts";
-import { t } from "./localization.ts";
+import { returnReminders } from "./retention/retentionConfig.ts";
 import { monetization } from "./monetization.ts";
 
 export interface RuntimeConfig {
     /** Daily prompt surface, killable from LiveOps without a build. */
     dailyPromptEnabled: boolean;
-    /** How long after leaving before the reminder fires. */
-    notificationDelaySeconds: number;
 }
 
+// The return-reminder cadence is deliberately NOT remoteable: it is fixed at
+// 24/48/72h in returnReminders.ts. A parsed-but-unused delay knob sat here for
+// a while and misled LiveOps operators into "tuning" a value nothing read.
 const DEFAULTS: Readonly<RuntimeConfig> = Object.freeze({
     dailyPromptEnabled: true,
-    notificationDelaySeconds: 86_400,
 });
 
-const RETURN_REMINDER_ID = "inkbloom-return-reminder";
+const LEGACY_RETURN_REMINDER_ID = "inkbloom-return-reminder";
 
 let config: RuntimeConfig = { ...DEFAULTS };
 let refreshTimer = 0;
@@ -50,12 +50,8 @@ function normalize(values: Record<string, unknown>): RuntimeConfig {
         values.inkbloom_runtime && typeof values.inkbloom_runtime === "object"
             ? (values.inkbloom_runtime as Record<string, unknown>)
             : values;
-    const delay = Number(root.notificationDelaySeconds);
     return {
         dailyPromptEnabled: typeof root.dailyPromptEnabled === "boolean" ? root.dailyPromptEnabled : true,
-        notificationDelaySeconds: Number.isFinite(delay)
-            ? Math.max(3_600, Math.min(delay, 604_800))
-            : DEFAULTS.notificationDelaySeconds,
     };
 }
 
@@ -63,12 +59,20 @@ async function refreshLiveOps(): Promise<void> {
     clearScheduledRefresh();
     const snapshot = await fetchLiveOps();
     if (!snapshot) {
-        config = { ...DEFAULTS };
-        // Outside a RUN host (plain `npm run dev`), monetization surfaces use
-        // development defaults so they are visible and testable. Inside a host
-        // that returned nothing, they fail closed.
-        monetization.applyLiveOps(null, !getRunCapabilities().host);
-        store.patch({ runtimeReady: true, runtimeConfigVersion: null });
+        // KEEP the live config on a failed fetch: resetting to DEFAULTS here
+        // yanked an enabled monetization surface for the rest of the session
+        // on a single resume-time network blip. Boot stays fail-closed via the
+        // initial state; retry only where a host could actually answer —
+        // without the capability this null is permanent.
+        if (!getRunCapabilities().host) {
+            // Outside a RUN host (plain `npm run dev`), monetization surfaces
+            // use development defaults so they are visible and testable.
+            monetization.applyLiveOps(null, true);
+        }
+        store.patch({ runtimeReady: true });
+        if (getRunCapabilities().liveops) {
+            refreshTimer = window.setTimeout(() => startRefreshCycle(), 60_000);
+        }
         return;
     }
     config = normalize(snapshot.values);
@@ -84,15 +88,21 @@ async function refreshTime(): Promise<void> {
     store.patch({ trustedTimeReady: await refreshServerTime() });
 }
 
+/**
+ * Re-anchor the whole 24/48/72h return cadence to now.
+ *
+ * This replaced a single 24h reminder. One ping gives a player exactly one
+ * chance to come back; a short cadence gives three without becoming spam, and
+ * stopping at 72h is deliberate — a fourth converts nobody and costs the
+ * notification permission the first three depend on.
+ */
 async function rearmNotifications(): Promise<void> {
     const state = store.get();
     if (!state.notificationsEnabled || state.notificationsConsent !== "granted") return;
-    await rearmLocalNotification({
-        id: RETURN_REMINDER_ID,
-        title: t("NotificationTitle"),
-        body: t("NotificationReEngagementBody"),
-        delaySeconds: config.notificationDelaySeconds,
-    });
+    // The pre-cadence reminder used its own id; leave it scheduled and the
+    // player gets the old generic ping alongside the new specific ones.
+    await cancelLocalNotification(LEGACY_RETURN_REMINDER_ID);
+    await returnReminders.refreshAll();
 }
 
 async function refreshRuntime(): Promise<void> {
@@ -119,6 +129,9 @@ export const runtimeServices = {
             host: getRunCapabilities().host,
             discoveries: store.get().discoveryCount,
         });
+        // Canonical core-loop name RUN's query filters on. The `game_loaded`
+        // funnel step keeps its shipped name; this is the queryable event.
+        this.track("game_opened", { version: packageJson.version });
     },
 
     resume(): void {

@@ -27,7 +27,17 @@ export interface PurchaseCoordinatorConfig<PurchaseResponse, OrderHistory> {
     classifyError?(error: unknown): "cancelled" | "failed" | "unknown";
     createId?: () => string;
     now?: () => number;
+    /** See DEFAULT_INTENT_TTL_MS. */
+    intentTtlMs?: number;
 }
+
+/**
+ * How long an unresolved intent may keep blocking checkout before it is
+ * abandoned. Orders settle inside a single server transaction, so one that
+ * order history still does not report as fulfilled after this long is dead —
+ * and an intent that outlives its order locks the player out of the whole shop.
+ */
+const DEFAULT_INTENT_TTL_MS = 15 * 60_000;
 
 export type PurchaseOutcome<PurchaseResponse = unknown> =
     | { status: "confirmed"; intent: PendingPurchaseIntent; response?: PurchaseResponse; reconciledOrder?: unknown }
@@ -45,6 +55,7 @@ export function createPurchaseCoordinator<PurchaseResponse = unknown, OrderHisto
 ): PurchaseCoordinator<PurchaseResponse> {
     const createId = config.createId ?? defaultId;
     const now = config.now ?? Date.now;
+    const intentTtlMs = config.intentTtlMs ?? DEFAULT_INTENT_TTL_MS;
     let inFlight: Promise<PurchaseOutcome<PurchaseResponse>> | null = null;
 
     async function confirm(
@@ -63,11 +74,22 @@ export function createPurchaseCoordinator<PurchaseResponse = unknown, OrderHisto
     async function reconcile(
         intent: PendingPurchaseIntent,
         cause: unknown,
+        /** Only a player-initiated purchase may retire a stale intent. */
+        mayExpire = false,
     ): Promise<PurchaseOutcome<PurchaseResponse>> {
         try {
             const history = await config.shop.getOrderHistory();
             const order = config.findConfirmedOrder(history, intent);
             if (order) return confirm(intent, undefined, order);
+            // The read SUCCEEDED and this intent is not in it as a fulfilled
+            // order — so it is missing, not merely unreadable. Past the TTL
+            // there is nothing left to wait for, and keeping it would block
+            // every future checkout, so give up on it deliberately. Gated on
+            // mayExpire: a passive resume check must stay read-only.
+            if (mayExpire && now() - intent.createdAtMs >= intentTtlMs) {
+                await config.pending.clear();
+                return { status: "failed", intent, error: cause };
+            }
         } catch {
             /* preserve the pending intent for the next safe resume */
         }
@@ -96,14 +118,20 @@ export function createPurchaseCoordinator<PurchaseResponse = unknown, OrderHisto
     async function runNew(productId: string, catalogItemId: string): Promise<PurchaseOutcome<PurchaseResponse>> {
         const existing = config.pending.load();
         if (existing) {
-            const reconciled = await reconcile(existing, new Error("A purchase outcome is still pending"));
+            const reconciled = await reconcile(existing, new Error("A purchase outcome is still pending"), true);
             if (reconciled.status === "confirmed") return reconciled;
             if (existing.productId === productId && existing.catalogItemId === catalogItemId) {
                 // This is a new explicit player tap for the same logical order.
-                // Retrying its idempotency key cannot create a duplicate charge.
+                // Retrying its idempotency key cannot create a duplicate charge,
+                // so re-persist the intent if reconcile just expired it out.
+                if (!config.pending.load()) await config.pending.save(existing);
                 return attempt(existing);
             }
-            return reconciled;
+            // A leftover intent for a DIFFERENT product must not swallow this
+            // tap — that is what turns one failed order into a shop-wide
+            // lockout. Report it only while it is still live; once reconcile
+            // has cleared it, fall through and open the new checkout.
+            if (config.pending.load()) return reconciled;
         }
 
         // ADAPT: persist this slice in the host save before opening checkout.

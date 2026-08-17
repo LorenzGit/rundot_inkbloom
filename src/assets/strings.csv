@@ -54,8 +54,6 @@ ToastSheetTorn,a clean sheet,uma folha limpa,una hoja limpia
 ToastAdCancelled,no nudge — the video was closed early,sem dica — o vídeo foi fechado antes,sin pista — el video se cerró antes
 ToastAdFailed,no nudge — try again in a moment,sem dica — tente de novo em instantes,sin pista — inténtalo en un momento
 ToastKitThanks,the Kit is yours — three new sheets on the shelf,o Estojo é seu — três folhas novas na prateleira,el Estuche es tuyo — tres hojas nuevas en el estante
-NotificationTitle,The ink is still wet,A tinta ainda está molhada,La tinta sigue húmeda
-NotificationReEngagementBody,"A fresh sheet is waiting, and the page still has secrets you have not caught.","Uma folha nova espera, e a página ainda guarda segredos.","Una hoja nueva espera, y la página aún guarda secretos."
 PotTitle,A POT OF INK,UM POTE DE TINTA,UN BOTE DE TINTA
 PotBlurb,Ten nudges to keep. They never expire; spend them one at a time.,Dez dicas para guardar. Nunca expiram; gaste uma de cada vez.,Diez pistas para guardar. Nunca caducan; gástalas de una en una.
 PotBuy,BUY A POT,COMPRAR UM POTE,COMPRAR UN BOTE
