@@ -13,6 +13,7 @@ import { saveSystem } from "./save.ts";
 import { runtimeServices } from "./runtimeServices.ts";
 import { inkAudio } from "../audio/inkAudio.ts";
 import { submitDiscoveryScore } from "../sdk/runCommerce.ts";
+import { showContextualLikePrompt } from "../sdk/runSdk.ts";
 
 import { analytics } from "./analytics/analyticsConfig.ts";
 /** A discovery or unlock the page should celebrate, in the order it happened. */
@@ -114,6 +115,9 @@ export function recordDiscovery(index: number, cell: number | null): void {
         // A new ink is the collection beat this game is built around — the
         // thing a player would show someone, unlike a distance number.
         analytics.event("milestone_reached", { milestone: "ink_unlocked", value: count, ink_id: ink.id });
+        // Ask for the like on a win. An ink unlock is this game's win — its own
+        // comment above calls it "the thing a player would show someone".
+        void showContextualLikePrompt();
     }
 
     // The sixtieth find summons the colophon — once, ever. The overlay itself
